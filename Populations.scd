@@ -121,7 +121,6 @@
 				};
 			});
 
-
 			if (~multiplyOn == true, {
 				if (0.25.coin == true, {
 					var whichCouple = couples.choose;
@@ -234,7 +233,6 @@
 			~genCounter = ~genCounter + 1;
 
 			s.sync;
-
 
 		)};
 
