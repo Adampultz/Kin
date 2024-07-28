@@ -115,7 +115,7 @@
 				newGen[cycleGenInd].size.do{
 					if ((1.0 / newGen[cycleGenInd].size).coin == true, {
 						var which = newGen[cycleGenInd].size.rand;
-						~mutation.(newGen[cycleGenInd][which], i, ~mutationWidth);
+						~mutationRho.(newGen[cycleGenInd][which], ~mutationWidth);
 						"Mutation of individual %".format(which).postln;
 					});
 				};
