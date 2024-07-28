@@ -1,0 +1,110 @@
+s.options.memSize_(2.pow(20));
+s.options.sampleRate_(48000);
+s.options.numInputBusChannels_(6);
+s.options.numOutputBusChannels_(40);
+s.options.hardwareBufferSize = 64;
+s.recHeaderFormat = "wav";
+
+s.options.outDevice_(
+	 //"Built-in Output"
+	// "ZoomAudioD"
+	"Fireface UCX (23732049)"
+	// "Fireface + Blackhole"
+	// "Blackhole + Computer Audio"
+	// "Fireface + Zoom"
+	// "Zoom + Fireface"
+	// "Scarlett 2i2 USB"
+	//"Komplete Audio 6"
+);
+
+s.options.inDevice_(
+	"Fireface UCX (23732049)"
+	// "ZoomAudioD"
+	// "Fireface + Blackhole"
+	// "Blackhole + Computer Audio"
+	// "Fireface + Zoom"
+	// "Zoom + Fireface"
+	// "Scarlett 2i2 USB"x
+	//"Komplete Audio 6"
+);
+
+"Variables.scd".loadRelative;
+
+MIDIIn.connectAll;
+
+s.waitForBoot{
+
+	~nyquist = s.sampleRate / 2;
+
+	"Arrays.scd".loadRelative;
+
+	~envGrp = Group.new;
+	~synthGrp = Group.new(~envGrp, \addAfter);
+	~convolveGrp = Group.new(~envGrp, \addAfter);
+	~mixerGrp = Group.new(~synthGrp, \addAfter);
+
+	"Busses.scd".loadRelative;
+
+	s.sync;
+
+	"Functions_newGen_1.2.scd".loadRelative;
+
+	s.sync;
+
+	~inSynth = Synth(\soundIn, target: ~envGrp);
+
+	~objPath = "/Users/adammac2023/Documents/Musik-business/Adam/2024/Speculative Sound Synthesis/Code_27.07.2024/Impulse_responses/";
+
+	~test = PathName(~objPath).files.do{|i|};
+
+	~parentBuffers = ~test.size.collect{|i| Signal.read(~test[i].fullPath)};
+
+	~maximumSize = ~maxSize.(~parentBuffers);
+
+	~rfftParams = ~rfftInfo.(~maximumSize);
+
+	~envRecBuf = Buffer.alloc(s, ~rfftParams[0]);
+	~popOutputRecBuf = Buffer.alloc(s, ~rfftParams[0]);
+
+	~freqResolution = (((~rfftParams[1]).asInteger) / ~nyquist);
+
+	~audioEnv = Env([0,1,1,0], [0.0, 0.9, 0.1], -4).asSignal(~rfftParams[0]);
+
+	~fourierEnv = ~fftEnv.(20, 20000, -4, ~rfftParams[1]);
+
+	~parentFreqResp = ~parentBuffers.size.collect{|i|
+		~freqResponse.(~parentBuffers[i], ~rfftParams[0], ~rfftParams[2]);
+	};
+
+	~newGen[0][0] = ~parentFreqResp.asList;
+
+	~newSigs[0] = ~newGen[0][0].size.collect{|i| ~newGeneration.(~newGen[0][0][i], ~rfftParams[2], ~audioEnv, ~fourierEnv)};
+
+	~newSigBufs = ~newSigs[0].size.collect{|i| Buffer.loadCollection(s, ~newSigs[0][i])};
+
+
+	s.sync;
+
+	~convolveSpectrum = ~prepConvolve.(~newSigBufs.choose, ~convolveFftsize);
+	~convolveSpectrum = ~convolveSpectrum.normalize;
+
+	s.sync;
+
+	~feedbackSynths[0] = Synth(\feedBack, [\irBuffer, ~convolveSpectrum.bufnum, \fftSize, ~convolveFftsize], target: ~convolveGrp);
+
+	Synth(\mixer, target: ~mixerGrp);
+
+	s.sync;
+
+	"Populations.scd".loadRelative;
+	"MIDI.scd".loadRelative;
+
+	~makeControllers.();
+
+	s.sync;
+
+	// Initialise the first and so far, only community
+	~populations.(0, ~newSigs[0]);
+
+	"Done".postln;
+};
