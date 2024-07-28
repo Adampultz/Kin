@@ -383,12 +383,13 @@
 	};
 };
 
-/*~mutationRho = {|individual, which, width = 1|
-var polar, window, realRho, imagMax, centreFreq, windowGain, winRealMax = 0, winImagMax = 0, maxRealGain, maxImagGain, realMean, imagMean, realImag, barkIndex;
+~mutationRho = {|individual width = 1|
+var polar, window, globalRhoMax, imagMax, centreFreq, windowGain, winRhoMax = 0, maxRealGain, maxImagGain, realMean, imagMean, realImag, barkIndex, fftWinSize;
+	fftWinSize = ~freqResolution * width;
 polar = individual.asPolar;
 // window = ~hammingInv.(~freqResolution * width);
-window = (Signal.hanningWindow(~freqResolution * width));
-realRho = individual.rho[individual.rho.maxIndex];
+window = (Signal.hanningWindow(fftWinSize)); // Creates a Hanning envelope for the Freqeuncy window that is being mutated
+globalRhoMax = polar.rho[polar.rho.maxIndex]; // Get value of peak rho
 /*		("Real max value of individual: %").format(realMax).postln;
 ("Imaginary max value of individual: %").format(imagMax).postln;
 ("Real mean value of individual: %").format(realMean).postln;
@@ -399,35 +400,24 @@ barkIndex = (~barkScale.size - 1).rand;
 centreFreq = (~barkScale[barkIndex] + ~barkScaleCells[barkIndex].rand) * ~freqResolution;
 "Mutation centre frequency: %".format(centreFreq / ~freqResolution).postln;
 
-(~freqResolution * width).asInteger.collect{|n|
-var idx, valReal, valImag;
-idx = (centreFreq - ((~freqResolution * width) / 2).asInteger) + n;
-valReal = individual.real[idx];
-valImag = individual.imag[idx];
+// Get the local maximum of the frequency window
+fftWinSize.asInteger.collect{|n|
+var idx, valRho;
+idx = (centreFreq - (fftWinSize / 2).asInteger) + n;
+valRho = individual.real[idx];
 
-if(valReal > winRealMax, {
-winRealMax = valReal;
+if(valRho > winRhoMax, {
+winRhoMax = valRho;
 });
 
-if(valImag > winImagMax, {
-winImagMax = valReal;
-});
 };
 
 /*		("Real max value of window: %").format(winRealMax).postln;
 ("Imaginary max value of window: %").format(winImagMax).postln;
 */
-if(winRealMax != 0,{
-maxRealGain = (realMax / (winRealMax * 2));
-maxImagGain = (imagMax / (winImagMax * 2));
 
-if(winImagMax == 0,{
-maxImagGain = 1;
-});
-},{
-maxRealGain = 1;
-maxImagGain = 1;
-});
+maxRealGain = globalRhoMax - winRhoMax; // Subtract the local maximum value from the global maximum value
+window = (window + 1) * maxRealGain * 0.5;
 
 /*	if(winImagMax != 0,{
 maxImagGain = imagMax / (winImagMax * 2)},{
@@ -442,10 +432,10 @@ maxImagGain = 0;
 // "Max real Gain: %".format(maxRealGain).postln;
 // "Max imaginary Gain: %".format(maxImagGain).postln;
 
-(~freqResolution * width).asInteger.collect{|n|
+fftWinSize.asInteger.collect{|n|
 var idx, valReal, valImag, gainModifier;
 gainModifier = 3;
-idx = (centreFreq - ((~freqResolution * width) / 2)).asInteger + n;
+idx = (centreFreq - (fftWinSize / 2)).asInteger + n;
 /*	valReal = individual.real[idx] * (window[n] * ((maxRealGain.abs) * gainModifier));
 valImag = individual.imag[idx] * (window[n] * ((maxRealGain.abs) * gainModifier));*/
 valReal = individual.real[idx] * ((1 + window[n]) * gainModifier);
@@ -453,7 +443,7 @@ valImag = individual.imag[idx] * ((1 + window[n]) * gainModifier);
 individual.real[idx] = valReal;
 individual.imag[idx] = valImag;
 };
-};*/
+};
 
 // Zero the phase. Doesn't seem to work properly. Look at linear phase
 ~zeroPhase = {|item|
