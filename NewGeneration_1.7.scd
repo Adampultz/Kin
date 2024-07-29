@@ -4,6 +4,7 @@ s.options.numInputBusChannels_(6);
 s.options.numOutputBusChannels_(40);
 s.options.hardwareBufferSize = 64;
 s.recHeaderFormat = "wav";
+s.options.numBuffers = 2048;
 
 s.options.outDevice_(
 	 //"Built-in Output"
@@ -82,6 +83,7 @@ s.waitForBoot{
 
 	~newSigBufs = ~newSigs[0].size.collect{|i| Buffer.loadCollection(s, ~newSigs[0][i])};
 
+	~parentIRs = ~newSigBufs.deepCopy;
 
 	s.sync;
 
