@@ -94,31 +94,31 @@
 
 // Old version of combine
 /*~combine = {|newPop, rfftSize|
-	var idx = 0;
-	var popSize = newPop.size;
-	var newInd = (popSize * 2).collect{2.collect{}};
-	var newComplex;
-	/*/*	var idx = 0;*/
-	var newPopCompl = newPop.size.collect{|i|
-	2.collect{ |n|
-	rfftSize.size}};*/
+var idx = 0;
+var popSize = newPop.size;
+var newInd = (popSize * 2).collect{2.collect{}};
+var newComplex;
+/*/*	var idx = 0;*/
+var newPopCompl = newPop.size.collect{|i|
+2.collect{ |n|
+rfftSize.size}};*/
 
-	popSize.collect{|ind|
-		var nextInd = (ind + 1) % 2;
-		2.collect{|xOver|
-			var xOver_1 = (xOver + 1) % 2;
-			2.collect{|compl|
-				newInd[idx][compl] = newPop[ind][xOver][compl] ++ newPop[nextInd][xOver_1][compl];
-			};
-			idx = idx + 1;
-		};
-	};
+popSize.collect{|ind|
+var nextInd = (ind + 1) % 2;
+2.collect{|xOver|
+var xOver_1 = (xOver + 1) % 2;
+2.collect{|compl|
+newInd[idx][compl] = newPop[ind][xOver][compl] ++ newPop[nextInd][xOver_1][compl];
+};
+idx = idx + 1;
+};
+};
 
-	newComplex = (popSize * 2).collect{|ind|
-		newInd[ind][0].complex(newInd[ind][1])
-	};
+newComplex = (popSize * 2).collect{|ind|
+newInd[ind][0].complex(newInd[ind][1])
+};
 
-	newComplex;
+newComplex;
 };*/
 
 // Combine two parents. Combines the lower spectrum of each with the upper spectrum of the other. Consider introducing a probabilty of flipping high and low spectrums.
@@ -383,66 +383,66 @@
 	};
 };
 
-~mutationRho = {|individual width = 1|
-var polar, window, globalRhoMax, imagMax, centreFreq, windowGain, winRhoMax = 0, maxRealGain, maxImagGain, realMean, imagMean, realImag, barkIndex, fftWinSize;
+~mutationRho = {|individual, width = 1|
+	var polar, window, globalRhoMax, centreFreq, windowGain, winRhoMax = 0, barkIndex, maxRealGain, fftWinSize, newComplex;
 	fftWinSize = ~freqResolution * width;
-polar = individual.asPolar;
-// window = ~hammingInv.(~freqResolution * width);
-window = (Signal.hanningWindow(fftWinSize)); // Creates a Hanning envelope for the Freqeuncy window that is being mutated
-globalRhoMax = polar.rho[polar.rho.maxIndex]; // Get value of peak rho
-/*		("Real max value of individual: %").format(realMax).postln;
-("Imaginary max value of individual: %").format(imagMax).postln;
-("Real mean value of individual: %").format(realMean).postln;
-("Imaginary mean value of individual: %").format(imagMean).postln;*/
-// windowGain = (1.0 - distribution);
-// centreFreq = (~freqResolution) * (distribution * 20000).asInteger;
-barkIndex = (~barkScale.size - 1).rand;
-centreFreq = (~barkScale[barkIndex] + ~barkScaleCells[barkIndex].rand) * ~freqResolution;
-"Mutation centre frequency: %".format(centreFreq / ~freqResolution).postln;
+	polar = individual.asPolar;
+	// window = ~hammingInv.(~freqResolution * width);
+	window = Signal.hanningWindow(fftWinSize).asArray; // Creates a Hanning envelope for the Freqeuncy window that is being mutated
+	globalRhoMax = polar.rho[polar.rho.maxIndex]; // Get value of peak rho
+	/*		("Real max value of individual: %").format(realMax).postln;
+	("Imaginary max value of individual: %").format(imagMax).postln;
+	("Real mean value of individual: %").format(realMean).postln;
+	("Imaginary mean value of individual: %").format(imagMean).postln;*/
+	// windowGain = (1.0 - distribution);
+	// centreFreq = (~freqResolution) * (distribution * 20000).asInteger;
+	barkIndex = (~barkScale.size - 1).rand;
+	centreFreq = (~barkScale[barkIndex] + ~barkScaleCells[barkIndex].rand) * ~freqResolution;
+	"Mutation centre frequency: %".format(centreFreq / ~freqResolution).postln;
 
-// Get the local maximum of the frequency window
-fftWinSize.asInteger.collect{|n|
-var idx, valRho;
-idx = (centreFreq - (fftWinSize / 2).asInteger) + n;
-valRho = individual.real[idx];
+	// Get the local maximum of the frequency window
+	fftWinSize.asInteger.collect{|n|
+		var idx, valRho;
+		idx = (centreFreq - (fftWinSize / 2).asInteger) + n;
+		valRho = individual.real[idx];
 
-if(valRho > winRhoMax, {
-winRhoMax = valRho;
-});
+		if(valRho > winRhoMax, {
+			winRhoMax = valRho;
+		});
 
-};
+	};
 
-/*		("Real max value of window: %").format(winRealMax).postln;
-("Imaginary max value of window: %").format(winImagMax).postln;
-*/
+	/*		("Real max value of window: %").format(winRealMax).postln;
+	("Imaginary max value of window: %").format(winImagMax).postln;
+	*/
 
-maxRealGain = globalRhoMax - winRhoMax; // Subtract the local maximum value from the global maximum value
-window = (window + 1) * maxRealGain * 0.5;
+	maxRealGain = globalRhoMax - winRhoMax; // Subtract the local maximum value from the global maximum value
+	window = window  * maxRealGain * 0.3;
 
-/*	if(winImagMax != 0,{
-maxImagGain = imagMax / (winImagMax * 2)},{
-maxImagGain = 0;
-});*/
-//
-// "Max real: %".format(realMax).postln;
-// "Max imaginary: %".format(imagMax).postln;
-// "Max real Window: %".format(winRealMax).postln;
-// "Max imaginary Window: %".format(winImagMax).postln;
+	/*	if(winImagMax != 0,{
+	maxImagGain = imagMax / (winImagMax * 2)},{
+	maxImagGain = 0;
+	});*/
+	//
+	// "Max real: %".format(realMax).postln;
+	// "Max imaginary: %".format(imagMax).postln;
+	// "Max real Window: %".format(winRealMax).postln;
+	// "Max imaginary Window: %".format(winImagMax).postln;
 
-// "Max real Gain: %".format(maxRealGain).postln;
-// "Max imaginary Gain: %".format(maxImagGain).postln;
+	// "Max real Gain: %".format(maxRealGain).postln;
+	// "Max imaginary Gain: %".format(maxImagGain).postln;
 
-fftWinSize.asInteger.collect{|n|
-var idx, valReal, valImag, gainModifier;
-gainModifier = 3;
-idx = (centreFreq - (fftWinSize / 2)).asInteger + n;
-/*	valReal = individual.real[idx] * (window[n] * ((maxRealGain.abs) * gainModifier));
-valImag = individual.imag[idx] * (window[n] * ((maxRealGain.abs) * gainModifier));*/
-valReal = individual.real[idx] * ((1 + window[n]) * gainModifier);
-valImag = individual.imag[idx] * ((1 + window[n]) * gainModifier);
-individual.real[idx] = valReal;
-individual.imag[idx] = valImag;
-};
+	fftWinSize.asInteger.collect{|n|
+		var idx, valRho, gainModifier;
+		idx = (centreFreq - (fftWinSize / 2)).asInteger + n;
+		/*	valReal = individual.real[idx] * (window[n] * ((maxRealGain.abs) * gainModifier));
+		valImag = individual.imag[idx] * (window[n] * ((maxRealGain.abs) * gainModifier));*/
+		valRho = polar.rho[idx] + window[n];
+		polar.rho[idx] = valRho;
+	};
+
+	newComplex = polar.real.as(Signal).complex(polar.imag.as(Signal));
+
 };
 
 // Zero the phase. Doesn't seem to work properly. Look at linear phase
@@ -509,6 +509,7 @@ SynthDef(\mixer,
 	{|buf, panPos|
 		var source;
 		source = In.ar(~mixerBus, 2);
+		source = Limiter.ar(source, 0.9);
 		Out.ar(~mainOut, (source * ~masterVol.kr));
 		/*		Out.ar(~toBlackhole, source);*/
 }).add;
