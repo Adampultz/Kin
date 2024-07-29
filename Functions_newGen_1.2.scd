@@ -390,12 +390,6 @@ newComplex;
 	// window = ~hammingInv.(~freqResolution * width);
 	window = Signal.hanningWindow(fftWinSize).asArray; // Creates a Hanning envelope for the Freqeuncy window that is being mutated
 	globalRhoMax = polar.rho[polar.rho.maxIndex]; // Get value of peak rho
-	/*		("Real max value of individual: %").format(realMax).postln;
-	("Imaginary max value of individual: %").format(imagMax).postln;
-	("Real mean value of individual: %").format(realMean).postln;
-	("Imaginary mean value of individual: %").format(imagMean).postln;*/
-	// windowGain = (1.0 - distribution);
-	// centreFreq = (~freqResolution) * (distribution * 20000).asInteger;
 	barkIndex = (~barkScale.size - 1).rand;
 	centreFreq = (~barkScale[barkIndex] + ~barkScaleCells[barkIndex].rand) * ~freqResolution;
 	"Mutation centre frequency: %".format(centreFreq / ~freqResolution).postln;
@@ -409,34 +403,17 @@ newComplex;
 		if(valRho > winRhoMax, {
 			winRhoMax = valRho;
 		});
-
 	};
-
-	/*		("Real max value of window: %").format(winRealMax).postln;
-	("Imaginary max value of window: %").format(winImagMax).postln;
-	*/
 
 	maxRealGain = globalRhoMax - winRhoMax; // Subtract the local maximum value from the global maximum value
 	window = window  * maxRealGain * 0.3;
-
-	/*	if(winImagMax != 0,{
-	maxImagGain = imagMax / (winImagMax * 2)},{
-	maxImagGain = 0;
-	});*/
-	//
-	// "Max real: %".format(realMax).postln;
-	// "Max imaginary: %".format(imagMax).postln;
-	// "Max real Window: %".format(winRealMax).postln;
-	// "Max imaginary Window: %".format(winImagMax).postln;
-
-	// "Max real Gain: %".format(maxRealGain).postln;
-	// "Max imaginary Gain: %".format(maxImagGain).postln;
+	maxRealGain.postln;
+	winRhoMax.postln;
+	{window.plot}.defer;
 
 	fftWinSize.asInteger.collect{|n|
 		var idx, valRho, gainModifier;
 		idx = (centreFreq - (fftWinSize / 2)).asInteger + n;
-		/*	valReal = individual.real[idx] * (window[n] * ((maxRealGain.abs) * gainModifier));
-		valImag = individual.imag[idx] * (window[n] * ((maxRealGain.abs) * gainModifier));*/
 		valRho = polar.rho[idx] + window[n];
 		polar.rho[idx] = valRho;
 	};
@@ -511,7 +488,7 @@ SynthDef(\mixer,
 		source = In.ar(~mixerBus, 2);
 		source = Limiter.ar(source, 0.9);
 		Out.ar(~mainOut, (source * ~masterVol.kr));
-		/*		Out.ar(~toBlackhole, source);*/
+		Out.ar(~toBlackhole, source);
 }).add;
 
 SynthDef(\soundIn,
