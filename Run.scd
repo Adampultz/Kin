@@ -40,6 +40,8 @@ s.plotTree;
 
 ~spectralEnvelopeOn = true; // For attenuating the high frequencies of the spectrum
 
+~mutationCoeff = 0.5;
+
 // Fitness Variables. For balancing the parameters contributing to calculating the fitness function. All values are between 0 and 1
 ~slicepointCoeff = 0; // Biases toward shorter attacks. Seems to favour darker irs when above 0
 ~specCentDevGenoCoeff = 1.0; // The deviation of the spectral centroid, calculated from the genome
