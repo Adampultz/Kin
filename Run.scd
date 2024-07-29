@@ -32,7 +32,7 @@ s.plotTree;
 
 ~multiplyOn = true; // For multiplying the complex spectrum of individuals
 
-~mutationWidth = 100; // Measured in frequencies
+~mutationWidth = 10; // Measured in frequencies. Good values could be between 10 and 200. TODO scale logarithmically
 
 // ~mutationProb = 0.001; mutation is currently a function of the size of the population, so this is not in use
 
@@ -41,10 +41,10 @@ s.plotTree;
 ~spectralEnvelopeOn = true; // For attenuating the high frequencies of the spectrum
 
 // Fitness Variables. For balancing the parameters contributing to calculating the fitness function. All values are between 0 and 1
-~slicepointCoeff = 0.5; // Biases toward shorter attacks
+~slicepointCoeff = 0; // Biases toward shorter attacks. Seems to favour darker irs when above 0
 ~specCentDevGenoCoeff = 1.0; // The deviation of the spectral centroid, calculated from the genome
 ~specCentDevPhenoCoeff = 1.0; // The deviation of the spectral centroid, calculated from the phenome.
 ~distanceModerator = 0; // If using the lower distance to the spectral centroid. Currently not in use
 
-// The width of the snippet of the environments spectrum that will be inserted into an individual. 0 is nothing, 1 equals the entire range between cut point and the next value on the bark scale
-~envInsertWidth = 0.2;
+// The width of the snippet of the environments spectrum that will be inserted into an individual. 0 is nothing, 1 equals the entire range between cut point and the next value on the bark scale. If set very high, it works like a sampler, inserting recognizable audio into irs.
+~envInsertWidth = 0.1;

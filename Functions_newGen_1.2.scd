@@ -407,9 +407,6 @@ newComplex;
 
 	maxRealGain = globalRhoMax - winRhoMax; // Subtract the local maximum value from the global maximum value
 	window = window  * maxRealGain * 0.3;
-	maxRealGain.postln;
-	winRhoMax.postln;
-	{window.plot}.defer;
 
 	fftWinSize.asInteger.collect{|n|
 		var idx, valRho, gainModifier;
