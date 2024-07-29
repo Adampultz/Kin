@@ -141,7 +141,7 @@
 				});
 			});
 
-			if (~envInsert == true && ~envRecOn == false, {
+			if (~envInsert && ~envRecOn.not, {
 				if (1.0.coin == true, {
 					var which = newGen[cycleGenInd].size.rand;
 					newGen[cycleGenInd][which] = ~insertEnvSpectrum.(newGen[cycleGenInd][which], environment[1], ~envInsertWidth);
@@ -149,10 +149,12 @@
 				});
 			});
 
-			if (~spectralEnvelopeOn == true,{
+			if (~spectralEnvelopeOn == true,{ // TODO: polar multiplication
 				newGen[cycleGenInd].do{|item|
-					item.real = item.real * ~fourierEnv;
-					item.imag = item.imag * ~fourierEnv;
+					var polar;
+					polar = item.asPolar;
+					polar.rho = polar.rho * ~fourierEnv;
+					item = polar.real.as(Signal).complex(polar.imag.as(Signal));
 				};
 			});
 
@@ -166,6 +168,7 @@
 			newSigBufs[(cycleGenInd + 1) % ~sigBufRedundancy].do({ arg i;
 				if(i != nil, {
 					i.free;
+					i = nil;
 				});
 			});
 
@@ -175,7 +178,7 @@
 
 			s.sync;
 
-			if (~envRecOn == false, {
+			if (~envRecOn.not, {
 				Routine{ 1.do {
 					~envRecOn = true;
 					"Recording environment on".postln;
