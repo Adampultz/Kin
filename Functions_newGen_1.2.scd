@@ -121,7 +121,7 @@ newInd[ind][0].complex(newInd[ind][1])
 newComplex;
 };*/
 
-// Combine two parents. Combines the lower spectrum of each with the upper spectrum of the other. Consider introducing a probabilty of flipping high and low spectrums.
+// Combine two parents. Combines the lower spectrum of each with the upper spectrum of the other. Consider introducing a probabilty of flipping high and low spectrums. ToDO: remove rfft argument
 ~combine2 = {|newPop, rfftSize|
 	var idx = 0;
 	var popSize = newPop.size;
@@ -153,7 +153,7 @@ newComplex;
 ~newGenerationArray = {|array, cosTable, audioEnv|
 	var y;
 	array.size.collect{|i|
-		(array[i].real.irfft(array[i].imag, cosTable) * audioEnv).normalize;
+		(array[i].real.irfft(array[i].imag, cosTable)).normalize;
 	};
 };
 
@@ -398,20 +398,22 @@ newComplex;
 	fftWinSize.asInteger.collect{|n|
 		var idx, valRho;
 		idx = (centreFreq - (fftWinSize / 2).asInteger) + n;
-		valRho = individual.real[idx];
+		valRho = polar.rho[idx];
 
 		if(valRho > winRhoMax, {
 			winRhoMax = valRho;
 		});
 	};
 
-	maxRealGain = globalRhoMax - winRhoMax; // Subtract the local maximum value from the global maximum value
-	window = window  * maxRealGain * 0.3;
+	// {window.plot}.defer;
+	maxRealGain = (globalRhoMax / winRhoMax) / 2; // Subtract the local maximum value from the global maximum value
+	window = 1 + (window * maxRealGain * ~mutationCoeff);
+	// {window.plot}.defer;
 
 	fftWinSize.asInteger.collect{|n|
 		var idx, valRho, gainModifier;
 		idx = (centreFreq - (fftWinSize / 2)).asInteger + n;
-		valRho = polar.rho[idx] + window[n];
+		valRho = polar.rho[idx] * window[n];
 		polar.rho[idx] = valRho;
 	};
 
@@ -435,7 +437,7 @@ newComplex;
 	var counter = ~pebble + 1;
 	counter % 2 };
 
-// For multiplying two spectrums
+// For multiplying two spectrums. TODO: multiply polar
 ~multiplyComplex = {|items|
 	var newItem = Signal.newClear(items[0].size).asComplex;
 	newItem.real = items[0].real * items[1].real;
@@ -459,16 +461,16 @@ newComplex;
 		{|buf, panPos, index, slicePoint|
 			var source, spectralShape, spectralShapeAvg, envirSpectralShape, distance, averageTrig, specCentAvg;
 			source = PlayBuf.ar(1, buf, doneAction: 2);
-			envirSpectralShape = ~envCent.kr;
+			envirSpectralShape = ~envCent.kr; // Spectral centroid measured by microphones
 			spectralShape = FluidSpectralShape.kr(source, select: [\centroid], windowSize: 2048);
 			// Average the difference between the environments spectral centroid and the ir spectral centroid over 1-second windows
 			distance = AverageOutput.kr(((spectralShape - envirSpectralShape) / ~nyquist).clip(-1.0, 1.0).squared, Impulse.kr(1));
 			// Sample and hold the average of the distance between the spectral centroid of the individual to the environment (Average of 1 second);
-			distance = Latch.kr(distance, DelayN.ar(Impulse.kr(0), 1, 1.0));
+			distance = Latch.kr(distance, DelayN.kr(Impulse.kr(0), 1, 1.0));
 
 
 			// Sample and hold the difference between the average of a short(er) of the environment and the average of the last 10 seconds of the environment. Gives an estimate of the impulse responses impact on the environment. "slicepoint" refers to the slice point identified by running FluCoMa's novelty slicer on the spectrum of the ir buffer
-			averageTrig = DelayN.ar(Impulse.kr(0), slicePoint, slicePoint);
+			averageTrig = DelayN.kr(Impulse.kr(0), slicePoint, slicePoint);
 			specCentAvg = AverageOutput.kr(envirSpectralShape, averageTrig);
 			specCentAvg = Latch.kr(((specCentAvg - ~envCentAvg.kr) / ~nyquist).squared, averageTrig);
 			source = Pan2.ar(source, panPos);
@@ -506,7 +508,7 @@ SynthDef(\feedBack,
 		source = SoundIn.ar(~micInStereo);
 		amplitude = RMS.kr(source * 10, 10);
 		env = EnvGen.kr(Env.asr(fadeTime, releaseTime: fadeTime), gate, doneAction: 2).sqrt;
-		convolution = PartConv.ar(source, 4096, irBuffer).scope;
+		convolution = PartConv.ar(source, 4096, irBuffer);
 		out = XFade2.ar(source, convolution, ~convolveMix.kr);
 		Out.ar(~mixerBus, (out * ~feedbackVol.kr.scope) * (1.0 - amplitude).clip(0.0, 1.0) * env.scope);
 }).add;
@@ -540,6 +542,5 @@ SynthDef(\rec,
 	s.sync;
 	~feedbackSynths[~pebble].set(\gate, 0);
 	~pebble = ~counter.();
-	~pebble.postln;
 	~feedbackSynths[~pebble] = Synth(\feedBack, [\irBuffer, spectrum.normalize, \fftSize, fftSize], target: ~convolveGrp);
 };
