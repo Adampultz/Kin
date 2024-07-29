@@ -23,6 +23,8 @@
 // The width of the snippet of the environments spectrum that will be inserted into an individual. 0 is nothing, 1 equals the entire range between cut point and the next value on the bark scale
 ~envInsertWidth = 0.2;
 
+~mutationCoeff = 0.5;
+
 ~ancestralMemory = 4; // How many generations (as audio buffers) are stored
 ~sigBufRedundancy = 4; // For storing and freeing ir buffers
 ~genCounter = 0;
