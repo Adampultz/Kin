@@ -11,8 +11,8 @@ fileNameText.string = "%".format(~name);
 fileNameText.action = {|field|
 	var date = Date.getDate.stamp.asString;
 	~name = "%".format(field.value);
-	~objName = ~name ++ "_%_%_%_%_%.wav".format("objectResponse", s.sampleRate, ~dur, ~roundTripLatency, date);
-	~impulseName = ~name ++ "_%_%_%_%.wav".format("impulseResponse", s.sampleRate, ~dur, date);
+	~objName = ~name ++ "_%_%_%_%".format("objectResponse", s.sampleRate, ~dur, ~roundTripLatency);
+	~impulseName = ~name ++ "_%_%_%".format("impulseResponse", s.sampleRate, ~dur);
 	"Audio files will be saved with: %".format(~name).postln;
 };
 
@@ -48,14 +48,16 @@ sweepTime.value = ~recDur;
 sweepTime.action = {|field|
 	~recDur = field.value;
 	~dur = ~recDur + ~tail;
-	~sineChangeDetect = 1};
+	~sineChangeDetect = 1;
+
+};
 
 tail = NumberBox(win, Rect(140, 260, 60, 20));
 tail.value = ~tail;
 tail.action = {|field|
 	~tail = field.value;
 	~dur = ~recDur + ~tail;
-	};
+};
 
 sweepTimeText = StaticText(win, Rect(10, 230, 100, 20)).string = "Sweep time";
 tailText = StaticText(win, Rect(10, 260, 100, 20)).string = "Tail";
