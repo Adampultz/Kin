@@ -4,7 +4,7 @@
 
 ~zeroPhaseOn = false;
 
-~mutationWidth = 10; // Measured in frequencies
+~mutationWidth = 100; // Measured in frequencies
 
 ~xOverProb = 0.7; // Probability of crossover (0 - 1)
 
