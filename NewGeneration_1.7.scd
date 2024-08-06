@@ -9,8 +9,8 @@ s.options.numBuffers = 2048;
 s.options.outDevice_(
 	 //"Built-in Output"
 	// "ZoomAudioD"
-	"Fireface UCX (23732049)"
-	// "Fireface + Blackhole"
+	// "Fireface UCX (23732049)"
+	"Fireface + Blackhole"
 	// "Blackhole + Computer Audio"
 	// "Fireface + Zoom"
 	// "Zoom + Fireface"
@@ -19,9 +19,9 @@ s.options.outDevice_(
 );
 
 s.options.inDevice_(
-	"Fireface UCX (23732049)"
+	// "Fireface UCX (23732049)"
 	// "ZoomAudioD"
-	// "Fireface + Blackhole"
+	"Fireface + Blackhole"
 	// "Blackhole + Computer Audio"
 	// "Fireface + Zoom"
 	// "Zoom + Fireface"
@@ -60,12 +60,9 @@ s.waitForBoot{
 
 	~parentBuffers = ~test.size.collect{|i| Signal.read(~test[i].fullPath)};
 
-	~maximumSize = ~maxSize.(~parentBuffers);
+	~maximumSize = ~parentBuffers.maxCollectionSize;
 
 	~rfftParams = ~rfftInfo.(~maximumSize);
-
-	~envRecBuf = Buffer.alloc(s, ~rfftParams[0]);
-	~popOutputRecBuf = Buffer.alloc(s, ~rfftParams[0]);
 
 	~freqResolution = (((~rfftParams[1]).asInteger) / ~nyquist);
 
@@ -77,9 +74,7 @@ s.waitForBoot{
 		~freqResponse.(~parentBuffers[i], ~rfftParams[0], ~rfftParams[2]);
 	};
 
-	~newGen[0][0] = ~parentFreqResp.asList;
-
-	~newSigs[0] = ~newGen[0][0].size.collect{|i| ~newGeneration.(~newGen[0][0][i], ~rfftParams[2], ~audioEnv, ~fourierEnv)};
+	~newSigs[0] = ~parentFreqResp.size.collect{|i| ~newGeneration.(~parentFreqResp[i], ~rfftParams[2], ~audioEnv, ~fourierEnv)};
 
 	~newSigBufs = ~newSigs[0].size.collect{|i| Buffer.loadCollection(s, ~newSigs[0][i])};
 
@@ -102,11 +97,13 @@ s.waitForBoot{
 	"MIDI.scd".loadRelative;
 
 	~makeControllers.();
+	"Visualisation.scd".loadRelative;
+	~freqResponsevisualise.(~parentFreqResp);
 
 	s.sync;
 
 	// Initialise the first and so far, only community
-	~populations.(0, ~newSigs[0]);
+	~populations.(0, ~newSigs[0], ~parentFreqResp.asList);
 
 	"Done".postln;
 };
