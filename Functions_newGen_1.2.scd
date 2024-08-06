@@ -17,24 +17,6 @@
 	indices;
 };
 
-// Get the maximum buffer size of a collection. Useful for generating spectrums of the same size, regardless of ir lengths
-~maxSize = {|array|
-	var maxSize;
-	maxSize = 0;
-
-	array.do{|i|
-		var objectBuffer, size;
-
-		size = i.size;
-
-		if(size > maxSize){
-			maxSize = size;
-		};
-	};
-
-	maxSize;
-};
-
 // Calculate the next power of two of the buffer size, rfftsize, and a cosine table for rfft and irfft transform
 ~rfftInfo = {|bufferSize|
 	var pow2, rfftSize, cosTable;
@@ -92,35 +74,6 @@
 	env = Env([0,1,1,0], [lo, sustain, high], curve).asSignal(size);
 };
 
-// Old version of combine
-/*~combine = {|newPop, rfftSize|
-var idx = 0;
-var popSize = newPop.size;
-var newInd = (popSize * 2).collect{2.collect{}};
-var newComplex;
-/*/*	var idx = 0;*/
-var newPopCompl = newPop.size.collect{|i|
-2.collect{ |n|
-rfftSize.size}};*/
-
-popSize.collect{|ind|
-var nextInd = (ind + 1) % 2;
-2.collect{|xOver|
-var xOver_1 = (xOver + 1) % 2;
-2.collect{|compl|
-newInd[idx][compl] = newPop[ind][xOver][compl] ++ newPop[nextInd][xOver_1][compl];
-};
-idx = idx + 1;
-};
-};
-
-newComplex = (popSize * 2).collect{|ind|
-newInd[ind][0].complex(newInd[ind][1])
-};
-
-newComplex;
-};*/
-
 // Combine two parents. Combines the lower spectrum of each with the upper spectrum of the other. Consider introducing a probabilty of flipping high and low spectrums. ToDO: remove rfft argument
 ~combine2 = {|newPop, rfftSize|
 	var idx = 0;
@@ -160,23 +113,58 @@ newComplex;
 
 // Inserts a selection of the spectrum of the environment into an individual.
 ~insertEnvSpectrum = {|indSpectrum, envSpectrum, width|
-	var barkIndex, startFreq, barkWidth, endFreq, envSelection, range = 2.collect{}, polarEnv, polarInd, newComplex;
+	var barkIndex, startFreq, barkWidth, envSelection, range = 2.collect{}, polarEnv, polarInd, newComplex, spectrumMeanRho;
 
 	barkIndex = (~barkScale.size - 1).rand;
 	startFreq = ~barkScale[barkIndex];
 	barkWidth = (~barkScaleCells[barkIndex] * width).asInteger;
-	endFreq = ~barkScale[barkIndex + 1] - barkWidth;
-	range[0] = (((~barkScaleCells[barkIndex] - barkWidth).rand + startFreq) * ~freqResolution).round.asInteger;
+	range[0] = (((~barkScaleCells[barkIndex]).rand + startFreq) * ~freqResolution).round.asInteger;
 	range[1] = (range[0] + (barkWidth * ~freqResolution)).round.asInteger;
 
 	polarEnv = envSpectrum.asPolar.rho[range[0]..range[1]];
 
 	polarInd = indSpectrum.asPolar;
 
-	polarEnv.do{|i, idx|
-		polarInd.rho[range[0] + idx] = i};
+	spectrumMeanRho = polarInd.rho[range[0]..range[1]].mean;
 
-	newComplex = polarInd.real.as(Signal).complex(polarInd.imag.as(Signal));
+	polarEnv.do{|i, idx|
+		polarInd.rho[range[0] + idx] = i + spectrumMeanRho};
+
+	newComplex = polarInd.polarToComplexSignal
+};
+
+// Inserts a selection of the time-domain audio into the rho of an individual, retaining phase.
+~insertEnvAudio = {|indSpectrum, envBuffer, width|
+	var audioSize, spectrumSize, sizeRatio, audioRange, envAudio, barkIndex, startFreq, barkWidth, endFreq, envSelection, range = 2.collect{}, polarInd, newComplex, window, spectrumMeanRho;
+
+	audioSize = envBuffer.numFrames;
+	spectrumSize = indSpectrum.real.size;
+	sizeRatio = spectrumSize / audioSize;
+	barkIndex = (~barkScale.size - 1).rand;
+	startFreq = ~barkScale[barkIndex];
+	barkWidth = (~barkScaleCells[barkIndex] * width).asInteger;
+	range[0] = (((~barkScaleCells[barkIndex]).rand + startFreq) * ~freqResolution).round.asInteger;
+	range[1] = (range[0] + (barkWidth * ~freqResolution)).round.asInteger;
+	audioRange = (range * sizeRatio).asInteger;
+
+	envBuffer.normalize.loadToFloatArray(action: {|array|
+		envAudio = array[audioRange[0]..audioRange[1]].abs.copy;
+	});
+
+	s.sync;
+
+	window = Signal.hanningWindow(envAudio.size).asArray; // Creates a Hanning envelope for the Freqeuncy window that is being mutated
+
+	polarInd = indSpectrum.asPolar;
+
+	spectrumMeanRho = polarInd.rho[range[0]..range[1]].mean;
+
+	envAudio.do{|i, idx|
+		var val = polarInd.rho[range[0] + idx];
+		polarInd.rho[range[0] + idx] = i + spectrumMeanRho;
+	};
+
+	newComplex = polarInd.polarToComplexSignal;
 };
 
 
@@ -191,7 +179,7 @@ newComplex;
 	Buffer.loadCollection(s, (ifft)).normalize
 };
 
-// Generate random numbers without repetition
+// // Generate random numbers without repetition
 ~randIntNoRep = { |n=8, min=0, max=7| (min..max).scramble.keep(n) };
 
 // make array of randomly selected couples. TODO: make more efficient
@@ -206,7 +194,9 @@ newComplex;
 
 	array = array.flatten;
 
-	a = ~randIntNoRep.(numCouples, 0, array.size - 1);
+	"coupleArray: %".format(array).postln;
+
+	a = Array.randNoRep(numCouples, 0, array.size - 1);
 
 	a.size.collect{|i|
 		array[a[i]]
@@ -307,88 +297,13 @@ newComplex;
 	choices
 };
 
-// Mutation. Needs work. Currently operating on the real and imaginary values. Will try with rho
-~mutation = {|individual, which, width = 1|
-	var window, realMax, imagMax, centreFreq, distribution, windowGain, winRealMax = 0, winImagMax = 0, maxRealGain, maxImagGain, realMean, imagMean, realImag, barkIndex;
-	// window = ~hammingInv.(~freqResolution * width);
-	window = (Signal.hanningWindow(~freqResolution * width));
-	realMax = individual.real[individual.real.maxIndex];
-	imagMax = individual.imag[individual.imag.maxIndex];
-	realMean = individual.real.normalize.mean;
-	imagMean = individual.imag.normalize.mean;
-	/*		("Real max value of individual: %").format(realMax).postln;
-	("Imaginary max value of individual: %").format(imagMax).postln;
-	("Real mean value of individual: %").format(realMean).postln;
-	("Imaginary mean value of individual: %").format(imagMean).postln;*/
-	distribution = exprand(0.001, 1.0);
-	// windowGain = (1.0 - distribution);
-	// centreFreq = (~freqResolution) * (distribution * 20000).asInteger;
-	barkIndex = (~barkScale.size - 1).rand;
-	centreFreq = (~barkScale[barkIndex] + ~barkScaleCells[barkIndex].rand) * ~freqResolution;
-	"Mutation centre frequency: %".format(centreFreq / ~freqResolution).postln;
-
-	(~freqResolution * width).asInteger.collect{|n|
-		var idx, valReal, valImag;
-		idx = (centreFreq - ((~freqResolution * width) / 2).asInteger) + n;
-		valReal = individual.real[idx];
-		valImag = individual.imag[idx];
-
-		if(valReal > winRealMax, {
-			winRealMax = valReal;
-		});
-
-		if(valImag > winImagMax, {
-			winImagMax = valReal;
-		});
-	};
-
-	/*		("Real max value of window: %").format(winRealMax).postln;
-	("Imaginary max value of window: %").format(winImagMax).postln;
-	*/
-	if(winRealMax != 0,{
-		maxRealGain = (realMax / (winRealMax * 2));
-		maxImagGain = (imagMax / (winImagMax * 2));
-
-		if(winImagMax == 0,{
-			maxImagGain = 1;
-		});
-	},{
-		maxRealGain = 1;
-		maxImagGain = 1;
-	});
-
-	/*	if(winImagMax != 0,{
-	maxImagGain = imagMax / (winImagMax * 2)},{
-	maxImagGain = 0;
-	});*/
-	//
-	// "Max real: %".format(realMax).postln;
-	// "Max imaginary: %".format(imagMax).postln;
-	// "Max real Window: %".format(winRealMax).postln;
-	// "Max imaginary Window: %".format(winImagMax).postln;
-
-	// "Max real Gain: %".format(maxRealGain).postln;
-	// "Max imaginary Gain: %".format(maxImagGain).postln;
-
-	(~freqResolution * width).asInteger.collect{|n|
-		var idx, valReal, valImag, gainModifier;
-		gainModifier = 3;
-		idx = (centreFreq - ((~freqResolution * width) / 2)).asInteger + n;
-		/*	valReal = individual.real[idx] * (window[n] * ((maxRealGain.abs) * gainModifier));
-		valImag = individual.imag[idx] * (window[n] * ((maxRealGain.abs) * gainModifier));*/
-		valReal = individual.real[idx] * ((1 + window[n]) * gainModifier);
-		valImag = individual.imag[idx] * ((1 + window[n]) * gainModifier);
-		individual.real[idx] = valReal;
-		individual.imag[idx] = valImag;
-	};
-};
-
 ~mutationRho = {|individual, width = 1|
-	var polar, window, globalRhoMax, centreFreq, windowGain, winRhoMax = 0, barkIndex, maxRealGain, fftWinSize, newComplex;
+	var polar, window, negWindow, globalRhoMax, centreFreq, windowGain, winRhoMax = 0, barkIndex, maxRealGain, fftWinSize, newComplex;
 	fftWinSize = ~freqResolution * width;
 	polar = individual.asPolar;
 	// window = ~hammingInv.(~freqResolution * width);
 	window = Signal.hanningWindow(fftWinSize).asArray; // Creates a Hanning envelope for the Freqeuncy window that is being mutated
+	negWindow = 1 - window;
 	globalRhoMax = polar.rho[polar.rho.maxIndex]; // Get value of peak rho
 	barkIndex = (~barkScale.size - 1).rand;
 	centreFreq = (~barkScale[barkIndex] + ~barkScaleCells[barkIndex].rand) * ~freqResolution;
@@ -405,142 +320,163 @@ newComplex;
 		});
 	};
 
-	// {window.plot}.defer;
 	maxRealGain = (globalRhoMax / winRhoMax) / 2; // Subtract the local maximum value from the global maximum value
 	window = 1 + (window * maxRealGain * ~mutationCoeff);
-	// {window.plot}.defer;
 
-	fftWinSize.asInteger.collect{|n|
-		var idx, valRho, gainModifier;
-		idx = (centreFreq - (fftWinSize / 2)).asInteger + n;
-		valRho = polar.rho[idx] * window[n];
-		polar.rho[idx] = valRho;
+	if (0.5.coin == true, {
+		fftWinSize.asInteger.collect{|n|
+			var idx, valRho, gainModifier;
+			idx = (centreFreq - (fftWinSize / 2)).asInteger + n;
+			valRho = polar.rho[idx] * window[n];
+			polar.rho[idx] = valRho;
+		};
+	}, {
+		fftWinSize.asInteger.collect{|n|
+			var idx, valRho, gainModifier;
+			idx = (centreFreq - (fftWinSize / 2)).asInteger + n;
+			valRho = polar.rho[idx] * negWindow[n];
+			polar.rho[idx] = valRho;
+		};
+		"negative mutation".postln;
+	});
+
+	newComplex = polar.polarToComplexSignal;
+
 	};
 
-	newComplex = polar.real.as(Signal).complex(polar.imag.as(Signal));
+	/*~geneSteal =
 
-};
+	~geneSwap =*/
 
-// Zero the phase. Doesn't seem to work properly. Look at linear phase
-~zeroPhase = {|item|
-	var polar, newComplex, size;
-	size = item.real.size;
-	polar = item.asPolar;
+	// Zero the phase. Doesn't seem to work properly. Look at linear phase
+	~zeroPhase = {|item|
+		var polar, newComplex, size;
+		size = item.real.size;
+		polar = item.asPolar;
 
-	size.do{|i|
-		polar.theta[i] = 0.0};
+		size.do{|i|
+			polar.theta[i] = 0.0};
 
-	newComplex = polar.real.as(Signal).complex(polar.imag.as(Signal));
-};
+		newComplex = polar.polarToComplexSignal
+	};
 
-~counter = {
-	var counter = ~pebble + 1;
-	counter % 2 };
+	~counter = {
+		var counter = ~pebble + 1;
+		counter % 2 };
 
-// For multiplying two spectrums. TODO: multiply polar
-~multiplyComplex = {|items|
-	var newItem = Signal.newClear(items[0].size).asComplex;
-	newItem.real = items[0].real * items[1].real;
-	newItem.imag = items[0].imag * items[1].imag;
+	// For multiplying two spectrums. TODO: multiply polar
+	~multiplyComplex = {|items|
+		var newItem = Signal.newClear(items[0].size).asComplex;
+		newItem.real = items[0].real * items[1].real;
+		newItem.imag = items[0].imag * items[1].imag;
 
-	newItem;
-};
+		newItem;
+	};
 
-~prepConvolve = {|buffer, fftSize|
-	var bufSize, spectrum;
-	bufSize = PartConv.calcBufSize(fftSize, buffer);
-	spectrum = Buffer.alloc(s, bufSize, 1);
-	spectrum.preparePartConv(buffer.normalize, fftSize);
-	s.sync;
-	spectrum;
-};
+	~multiplyPolar = {|items|
+		var polar, polarRho, polarTheta, newComplex;
+		polarRho = (items[0].asPolar.rho * items[1].asPolar.rho).normalize(0, 1.0);
+		polarTheta = items[0].asPolar.theta * items[1].asPolar.theta;
+		polar = Polar(polarRho, polarTheta);
+		newComplex = polar.polarToComplexSignal;
+		newComplex;
+	};
 
-// UGen for playing new irs.
-50.collect{|i|
-	SynthDef("bufPlay_%".format(i),
-		{|buf, panPos, index, slicePoint|
-			var source, spectralShape, spectralShapeAvg, envirSpectralShape, distance, averageTrig, specCentAvg;
+	~prepConvolve = {|buffer, fftSize|
+		var bufSize, spectrum;
+		bufSize = PartConv.calcBufSize(fftSize, buffer);
+		spectrum = Buffer.alloc(s, bufSize, 1);
+		spectrum.preparePartConv(buffer.normalize, fftSize);
+		s.sync;
+		spectrum;
+	};
+
+	// UGen for playing new irs.
+	SynthDef(\bufPlay,
+		{|buf, panPos, index, slicePoint, envirSpectralShape, specCentAvgBus, envCentAvgBus, distanceBus, mixerBus, nyquist, volume, windowSize|
+			var source, spectralShape, spectralShapeAvg, distance, averageTrig, specCentAvg, envSpecCentroidBus, envSpecCentroidAvgBus;
 			source = PlayBuf.ar(1, buf, doneAction: 2);
-			envirSpectralShape = ~envCent.kr; // Spectral centroid measured by microphones
-			spectralShape = FluidSpectralShape.kr(source, select: [\centroid], windowSize: 2048);
+			envSpecCentroidBus = In.kr(envirSpectralShape); // Spectral centroid measured by microphones
+			envSpecCentroidAvgBus = In.kr(envCentAvgBus);
+			spectralShape = FluidSpectralShape.kr(source, select: [\centroid], windowSize: windowSize);
 			// Average the difference between the environments spectral centroid and the ir spectral centroid over 1-second windows
-			distance = AverageOutput.kr(((spectralShape - envirSpectralShape) / ~nyquist).clip(-1.0, 1.0).squared, Impulse.kr(1));
+			distance = AverageOutput.kr(((spectralShape - envSpecCentroidBus) / nyquist).clip(-1.0, 1.0).squared, Impulse.kr(1));
 			// Sample and hold the average of the distance between the spectral centroid of the individual to the environment (Average of 1 second);
+			// In.kr(envCentAvgBus).poll;
 			distance = Latch.kr(distance, DelayN.kr(Impulse.kr(0), 1, 1.0));
-
-
 			// Sample and hold the difference between the average of a short(er) of the environment and the average of the last 10 seconds of the environment. Gives an estimate of the impulse responses impact on the environment. "slicepoint" refers to the slice point identified by running FluCoMa's novelty slicer on the spectrum of the ir buffer
 			averageTrig = DelayN.kr(Impulse.kr(0), slicePoint, slicePoint);
-			specCentAvg = AverageOutput.kr(envirSpectralShape, averageTrig);
-			specCentAvg = Latch.kr(((specCentAvg - ~envCentAvg.kr) / ~nyquist).squared, averageTrig);
+			specCentAvg = AverageOutput.kr(envSpecCentroidBus, averageTrig);
+			specCentAvg = Latch.kr(((specCentAvg - envSpecCentroidAvgBus) / nyquist).squared, averageTrig);
 			source = Pan2.ar(source, panPos);
-			Out.kr(~specCentAvgBus[i], specCentAvg);
+			Out.kr(specCentAvgBus, specCentAvg);
 			// Out.kr(~specCentBus, spectralShapeAvg);
-			Out.kr(~distanceBus[i], distance);
-			Out.ar(~mixerBus, source * ~irVolume.kr)
+			Out.kr(distanceBus, distance);
+			Out.ar(mixerBus, source * In.kr(volume))
 	}).add;
-};
-
-SynthDef(\mixer,
-	{|buf, panPos|
-		var source;
-		source = In.ar(~mixerBus, 2);
-		source = Limiter.ar(source, 0.9);
-		Out.ar(~mainOut, (source * ~masterVol.kr));
-		Out.ar(~toBlackhole, source);
-}).add;
-
-SynthDef(\soundIn,
-	{
-		var source, shapes, averageSpecCent;
-		source = Mix(SoundIn.ar(~micInStereo));
-		shapes = FluidSpectralShape.kr(source, [\centroid,\spread], windowSize: 2048);
-		averageSpecCent = AverageOutput.kr(shapes[0], Impulse.kr(0.1));
-		// shapes = OnePole.kr(shapes);
-		Out.kr(~envCentAvg, averageSpecCent);
-		Out.kr(~envCent, shapes[0]);
-		Out.kr(~envSpread, shapes[1]);
-}).add;
-
-SynthDef(\feedBack,
-	{|irBuffer, fftSize, fadeTime = 2, gate = 1|
-		var source, convolution, out, amplitude, ampSel, env;
-		source = SoundIn.ar(~micInStereo);
-		amplitude = RMS.kr(source * 10, 10);
-		env = EnvGen.kr(Env.asr(fadeTime, releaseTime: fadeTime), gate, doneAction: 2).sqrt;
-		convolution = PartConv.ar(source, 4096, irBuffer);
-		out = XFade2.ar(source, convolution, ~convolveMix.kr);
-		Out.ar(~mixerBus, (out * ~feedbackVol.kr.scope) * (1.0 - amplitude).clip(0.0, 1.0) * env.scope);
-}).add;
-
-SynthDef(\rec,
-	{| envBuf, popBuf|
-		var phasor, env, sourceEnv, sourcePop, recPop, recEnv;
-		phasor = Phasor.ar(0, BufRateScale.kr(envBuf), 0, BufFrames.kr(envBuf));
-		env = EnvGen.kr(Env([0,1,1,0], [0.1, 0.8, 0.1], [-4, 1 ,4]), 1.0, timeScale: BufFrames.kr(envBuf) * SampleDur.ir, doneAction: 2);
-		sourcePop = In.ar(~mixerBus, 2);
-		sourceEnv = Mix(SoundIn.ar(~micInStereo));
-		recPop = BufWr.ar(Mix(sourcePop) * env, popBuf, phasor, loop:0);
-		recEnv = BufWr.ar(sourceEnv * env, envBuf, phasor, loop:0);
-}).add;
-
-~playBufs =  {|buffers, slicePoints|
-	buffers.do({|i, idx|
-		var size = buffers.size;
-		var waitTime = (1.0 / size).rrand(1.5);
-		Synth("bufPlay_%".format(idx).format(idx), [\buf, i, \panPos, -1.0.rrand(1.0), \slicePoint, slicePoints[idx] / s.sampleRate, \index, idx], target: ~synthGrp);
-		waitTime.wait;
-	});
-};
 
 
-// Function for crossfading between feedback synths. Crossfade is needed when introducing a new buffer to PartConv. Uses a crude language-based counter with global variables (~pebble is there to keep maintain the counter outside of the function)
-~xFadeFbConvolve = {|buffers, fftSize, fadeTime = 2|
-	var buf, spectrum;
-	buf = buffers.choose;
-	spectrum = ~prepConvolve.(buf, 2048);
-	s.sync;
-	~feedbackSynths[~pebble].set(\gate, 0);
-	~pebble = ~counter.();
-	~feedbackSynths[~pebble] = Synth(\feedBack, [\irBuffer, spectrum.normalize, \fftSize, fftSize], target: ~convolveGrp);
-};
+	SynthDef(\mixer,
+		{|buf, panPos|
+			var source;
+			source = In.ar(~mixerBus, 2);
+			source = Limiter.ar(source, 0.9);
+			Out.ar(~mainOut, (source * ~masterVol.kr));
+			Out.ar(~toBlackhole, source);
+	}).add;
+
+	SynthDef(\soundIn,
+		{
+			var source, shapes, averageSpecCent;
+			source = Mix(SoundIn.ar(~micInStereo));
+			shapes = FluidSpectralShape.kr(source, [\centroid,\spread], windowSize: 2048);
+			averageSpecCent = AverageOutput.kr(shapes[0], Impulse.kr(0.1));
+			// shapes = OnePole.kr(shapes);
+			Out.kr(~envCentAvg, averageSpecCent);
+			Out.kr(~envCent, shapes[0]);
+			Out.kr(~envSpread, shapes[1]);
+	}).add;
+
+	SynthDef(\feedBack,
+		{|irBuffer, fftSize, fadeTime = 2, gate = 1|
+			var source, convolution, out, amplitude, ampSel, env;
+			source = SoundIn.ar(~micInStereo);
+			amplitude = RMS.kr(source * 10, 10);
+			env = EnvGen.kr(Env.asr(fadeTime, releaseTime: fadeTime), gate, doneAction: 2).sqrt;
+			convolution = PartConv.ar(source, 4096, irBuffer);
+			out = XFade2.ar(source, convolution, ~convolveMix.kr);
+			Out.ar(~mixerBus, (out * ~feedbackVol.kr) * (1.0 - amplitude).clip(0.0, 1.0) * env);
+	}).add;
+
+	SynthDef(\rec,
+		{| envBuf, popBuf|
+			var phasor, env, sourceEnv, sourcePop, recPop, recEnv;
+			phasor = Phasor.ar(0, BufRateScale.kr(envBuf), 0, BufFrames.kr(envBuf));
+			env = EnvGen.kr(Env([0,1,1,0], [0.1, 0.8, 0.1], [-4, 1 ,4]), 1.0, timeScale: BufFrames.kr(envBuf) * SampleDur.ir, doneAction: 2);
+			sourcePop = In.ar(~mixerBus, 2);
+			sourceEnv = Mix(SoundIn.ar(~micInStereo));
+			recPop = BufWr.ar(Mix(sourcePop) * env, popBuf, phasor, loop:0);
+			recEnv = BufWr.ar(sourceEnv * env, envBuf, phasor, loop:0);
+	}).add;
+
+	~playBufs =  {|buffers, slicePoints|
+		buffers.do({|i, idx|
+			var size = buffers.size;
+			var waitTime = (1.0 / size).rrand(1.5);
+			Synth(\bufPlay, [\buf, i, \panPos, -1.0.rrand(1.0), \slicePoint, slicePoints[idx] / s.sampleRate, \specCentAvgBus, ~specCentAvgBus[idx], \envCentAvgBus, ~envCentAvg, \envirSpectralShape, ~envCent, \distanceBus, ~distanceBus[idx], \mixerBus, ~mixerBus, \nyquist, ~nyquist, \volume, ~irVolume, \windowSize, 2048], target: ~synthGrp);
+			waitTime.wait;
+		});
+	};
+
+
+	// Function for crossfading between feedback synths. Crossfade is needed when introducing a new buffer to PartConv. Uses a crude language-based counter with global variables (~pebble is there to keep maintain the counter outside of the function)
+	~xFadeFbConvolve = {|buffers, fftSize, fadeTime = 2|
+		var buf, spectrum;
+		buf = buffers.choose;
+		spectrum = ~prepConvolve.(buf, 2048);
+		s.sync;
+		~feedbackSynths[~pebble].set(\gate, 0);
+		~pebble = ~counter.();
+		~feedbackSynths[~pebble] = Synth(\feedBack, [\irBuffer, spectrum.normalize, \fftSize, fftSize], target: ~convolveGrp);
+	};
+	
