@@ -9,6 +9,7 @@ s.plotTree;
 ~tasks[0].pause;
 ~tasks[0].resume;
 ~tasks[0].stop;
+~tasks[0].reset;
 
 
 // Volume controls
@@ -19,8 +20,6 @@ s.plotTree;
 ~irVolume.set(0.5); // 0 - 1. Volume of the playback of the irs. NanoKontrol: slider 3
 
 ~masterVol.set(0.5); // 0 -1. Master volume. NanoKontrol: slider 1
-
-
 
 // EA variables (see Variables.scd for setting these at compile time
 
@@ -34,16 +33,19 @@ s.plotTree;
 
 ~mutationWidth = 10; // Measured in frequencies. Good values could be between 10 and 200. TODO scale logarithmically
 
+~ancestorReturn = true;
+~ancestorReturnProb = 0.1;
+
 // ~mutationProb = 0.001; mutation is currently a function of the size of the population, so this is not in use
 
 ~envInsert = true; // For inserting a snippet of the environment into the genome of an individual
 
-~spectralEnvelopeOn = true; // For attenuating the high frequencies of the spectrum
+~spectralEnvelopeOn = false; // For attenuating the high frequencies of the spectrum
 
 ~mutationCoeff = 0.5;
 
 // Fitness Variables. For balancing the parameters contributing to calculating the fitness function. All values are between 0 and 1
-~slicepointCoeff = 0; // Biases toward shorter attacks. Seems to favour darker irs when above 0
+~slicepointCoeff = 1; // Biases toward shorter attacks. Seems to favour darker irs when above 0
 ~specCentDevGenoCoeff = 1.0; // The deviation of the spectral centroid, calculated from the genome
 ~specCentDevPhenoCoeff = 1.0; // The deviation of the spectral centroid, calculated from the phenome.
 ~distanceModerator = 0; // If using the lower distance to the spectral centroid. Currently not in use
