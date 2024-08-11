@@ -7,10 +7,10 @@ s.recHeaderFormat = "wav";
 s.options.numBuffers = 2048;
 
 s.options.outDevice_(
-	 //"Built-in Output"
+	// "MacBook Pro Speakers"
 	// "ZoomAudioD"
-	// "Fireface UCX (23732049)"
-	"Fireface + Blackhole"
+	"Fireface UCX (23732049)"
+	// "Fireface + Blackhole"
 	// "Blackhole + Computer Audio"
 	// "Fireface + Zoom"
 	// "Zoom + Fireface"
@@ -19,9 +19,10 @@ s.options.outDevice_(
 );
 
 s.options.inDevice_(
-	// "Fireface UCX (23732049)"
+	// "MacBook Pro Microphone"
+	"Fireface UCX (23732049)"
 	// "ZoomAudioD"
-	"Fireface + Blackhole"
+	// "Fireface + Blackhole"
 	// "Blackhole + Computer Audio"
 	// "Fireface + Zoom"
 	// "Zoom + Fireface"
@@ -66,7 +67,7 @@ s.waitForBoot{
 
 	~freqResolution = (((~rfftParams[1]).asInteger) / ~nyquist);
 
-	~audioEnv = Env([0,1,1,0], [0.0, 0.9, 0.1], -4).asSignal(~rfftParams[0]);
+	~audioEnv = Env([0,1,1,0], [0.0, 0.9, 0.1], -4).asSignal(~maximumSize);
 
 	~fourierEnv = ~fftEnv.(20, 20000, -4, ~rfftParams[1]);
 
@@ -74,7 +75,10 @@ s.waitForBoot{
 		~freqResponse.(~parentBuffers[i], ~rfftParams[0], ~rfftParams[2]);
 	};
 
-	~newSigs[0] = ~parentFreqResp.size.collect{|i| ~newGeneration.(~parentFreqResp[i], ~rfftParams[2], ~audioEnv, ~fourierEnv)};
+	~parentFreqResp.do{|i|
+		i.real.normalizeMagnitude};
+
+	~newSigs[0] = ~parentFreqResp.size.collect{|i| ~newGeneration.(~parentFreqResp[i], ~rfftParams[2], ~audioEnv)};
 
 	~newSigBufs = ~newSigs[0].size.collect{|i| Buffer.loadCollection(s, ~newSigs[0][i])};
 
