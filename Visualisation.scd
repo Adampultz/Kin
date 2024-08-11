@@ -21,8 +21,9 @@
 			array[n + (arraySizeHalf * i)].magnitude};
 		 ~a[i].domainSpecs_([20, 20000, \lin].asSpec);
 
-
 	};
+
+/*	~a.refresh;*/
 };
 
 ~window.();

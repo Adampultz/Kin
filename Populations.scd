@@ -1,5 +1,5 @@
 ~populations = {|popIndex, signals, newGeneration|
-	var newSigs, newSigBufs, run, featureBuffersGeno, newGen, spectralCentroidGeno, environment, slicePointArray, spectralCentroidDevPheno, genCounter, envRecOn, envRecBuf, popOutputRecBuf;
+	var newSigs, newSigBufs, run, featureBuffersGeno, newGen, spectralCentroidGeno, environment, slicePointArray, spectralCentroidDevPheno, genCounter, envRecOn, envRecBuf, popOutputRecBuf, age;
 
 	envRecOn = false;
 	genCounter = 0;
@@ -7,13 +7,14 @@
 
 	newGen = ~sigBufRedundancy.collect{};
 	newSigBufs = ~sigBufRedundancy.collect{};
-	newSigBufs[genCounter] = newSigs.size.collect{|i| Buffer.loadCollection(s, newSigs[i])}; // Load Signal buffers to standard buffers
+	newSigBufs[genCounter] = newSigs.size.collect{|i| Buffer.loadCollection(s, newSigs[i][0..~maximumSize])}; // Load Signal buffers to standard buffers
 	spectralCentroidGeno = newSigs.size.collect{}.asList; // Spectral centroid of the irs spectrum
 	slicePointArray = newSigs.size.collect{}.asList; // List for holding individual slice points of buffers
 	featureBuffersGeno = newSigBufs[genCounter].size.collect{Buffer(s, numChannels: 1)}.asList; // Spectral centroid of the irs spectrum estimated by the microphones
 	spectralCentroidDevPheno = newSigs.size.collect{}.asList; // Deviation of the spectral centroid of individuals compared to the spectral centroid of the environment
 
 	newGen[genCounter] = newGeneration.deepCopy;
+	age = List.fill(newGen[genCounter].size, {0});
 
 	envRecBuf = Buffer.alloc(s, s.sampleRate * ~envRecLength);
 	popOutputRecBuf = Buffer.alloc(s, s.sampleRate * ~envRecLength);
@@ -88,7 +89,7 @@
 		s.sync;
 
 		inf.do{
-			var currentGen;
+			var currentGen, parentsGen, adults, seniors;
 
 			"Generation: %".format(genCounter).postln;
 
@@ -98,6 +99,32 @@
 				{cycleGenInd = 0});
 
 			currentGen = newGen[cycleGenInd];
+			parentsGen = (cycleGenInd - 1) % 4;
+
+			adults = [].asList;
+			seniors = [].asList;
+
+			age.postln;
+
+			age.size.collect{|i|
+				age[i] = age[i] + 1;
+
+				if (age[i] >= 5, {
+					adults.add(newGen[cycleGenInd][i]);
+					"Individual % is an adult".format(i).postln;
+				});
+
+				if (age[i] >= 15, {
+					seniors.add(i);
+				});
+			};
+
+	/*		seniors.do{|i|
+				age.removeAt(i);
+				adults.removeAt(i);
+				newGen[cycleGenInd].removeAt(i);
+				"Individual % was removed".format(i).postln;
+			};*/
 
 			distanceBelow = ~distanceBelow.(spectralCentroidGeno); // Measure how far below the spectral centroid of each individual is to the mean spectral centroid
 
@@ -109,7 +136,7 @@
 			"Spec Centroid Phenotype: %".format(spectralCentroidGeno.asArray.normalizeSum).postln;
 			// "Slice array: %".format(slicePointArray.asArray.normalizeSum).postln;
 
-			// Sum various audio features and statistics to a single fitnes measure
+			// Sum various audio features and statistics to a single fitness measure
 			fitness = ((stats[0] * ~specCentDevGenoCoeff) + (spectralCentroidDevPheno.asArray.normalizeSum * ~specCentDevPhenoCoeff) + ((1 / slicePointArray.asArray.normalizeSum) * ~slicepointCoeff) + distanceBelow).normalizeSum;
 			"Fitness: %".format(fitness).postln;
 			// ~variancePlot.add(stats[1]);
@@ -118,16 +145,17 @@
 			// parents = ~wchooseNorepeat.(fitness, (fitness.size * 0.7).round.asInteger);
 			parents = fitness.wChooseNorepeat((fitness.size * 0.7).round.asInteger);
 			"Parents: %".format(parents).postln;
-			newGen.postln;
+			// newGen.postln;
 
-			"new generation: %".format(newGen[(cycleGenInd - 1) % 4]).postln;
+			"new generation: %".format(newGen[parentsGen]).postln;
 
 			// Generate a selection of couples.
-			couples = parents.pairsNoRep((newGen[(cycleGenInd - 1) % 4].size / 2).round.asInteger);
+			couples = parents.tupleRandNoRep(2, (newGen[parentsGen].size / 2).round.asInteger);
+			// couples = parents.pairsNoRep((newGen[parentsGen].size / 2).round.asInteger);
 
 			"Couples: %".format(couples).postln;
 
-			newGen[cycleGenInd] = couples.size.collect{|i| ~newPop.(newGen[(cycleGenInd - 1) % 4], ~rfftParams[1], couples[i], 0.7)}.flat.asList;
+			newGen[cycleGenInd] = couples.size.collect{|i| ~newPop.(newGen[parentsGen], ~rfftParams[1], couples[i], 0.7)}.flat.asList;
 
 			if (~mutationOn == true, {
 				newGen[cycleGenInd].size.do{
@@ -148,6 +176,7 @@
 					var newMultiply = ~multiplyPolar.(whichIndividuals);
 					s.sync;
 					newGen[cycleGenInd].add(newMultiply);
+					age.add(0);
 					"Multiply of couple %".format(whichCouple).postln;
 				});
 			});
@@ -164,11 +193,11 @@
 				if (~envInsertProb.coin == true, {
 					var which = newGen[cycleGenInd].size.rand;
 					if (0.5.coin == true, {
-					newGen[cycleGenInd][which] = ~insertEnvSpectrum.(newGen[cycleGenInd][which], environment[1], ~envInsertWidth);
-					"Environment Insert %".format(which).postln;
+						newGen[cycleGenInd][which] = ~insertEnvSpectrum.(newGen[cycleGenInd][which], environment[1], ~envInsertWidth);
+						"Environment Insert %".format(which).postln;
 					}, {
 						newGen[cycleGenInd][which] = ~insertEnvAudio.(newGen[cycleGenInd][which], envRecBuf, ~envInsertWidth);
-					"Environment Audio Insert %".format(which).postln;
+						"Environment Audio Insert %".format(which).postln;
 					})
 				});
 			});
@@ -179,14 +208,15 @@
 					var polar;
 					polar = item.asPolar;
 					polar.rho = polar.rho * ~fourierEnv;
-					item = polar.real.as(Signal).complex(polar.imag.as(Signal));
+					item = polar.polarToComplexSignal;
 				};
 			});
 
 			if (~ancestorReturn == true, {
 				if (~ancestorReturnProb.coin == true,{
 					"Ancestor returns".postln;
-					newGen[cycleGenInd].add(~parentFreqResp.choose)
+					newGen[cycleGenInd].add(~parentFreqResp.choose);
+					age.add(5);
 				})
 			});
 
@@ -194,7 +224,7 @@
 			// ~monitor = newGen[cycleGenInd];
 
 			newSigs = newGen[cycleGenInd].size.collect{|i|
-				~newGeneration.(newGen[cycleGenInd][i], ~rfftParams[2], ~audioEnv, ~fourierEnv);
+				~newGeneration.(newGen[cycleGenInd][i], ~rfftParams[2], ~audioEnv);
 			};
 
 
@@ -210,7 +240,7 @@
 
 			s.sync;
 
-			newSigBufs[cycleGenInd] = newSigs.size.collect{|i| Buffer.loadCollection(s, newSigs[i])};
+			newSigBufs[cycleGenInd] = newSigs.size.collect{|i| Buffer.loadCollection(s, newSigs[i][0..~maximumSize])};
 
 			s.sync;
 
