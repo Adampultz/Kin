@@ -38,14 +38,15 @@
 
 	complex = rfft(object, cosTable);
 
+	complex;
+
 };
 
 // Crossover function for EA. Uses the Bark scale. First a random discrete section of the bark scale is chosen, and then a random point in that section. Crossover happens in both the real and imaginary value arrays. TODO: try doing crossover on rho in the polar representation (no theta).
 ~crossover = {|parents, size|
-	var rand, xOverPoint, xOverPoint_m1, size_m1, xOverArray, newInd, temparray, barkIndex;
-	rand = exprand(0.001, 1.0);
+	var xOverPoint, xOverPoint_m1, size_m1, xOverArray, newInd, temparray, barkIndex;
+	/*	rand = exprand(0.001, 1.0);*/
 	temparray = 2.collect{2.collect{2.collect{}}};
-	// xOverPoint = (~freqResolution * 20000 * rand).asInteger;
 	barkIndex = (~barkScale.size - 1).rand;
 	xOverPoint = ((~barkScale[barkIndex] + ~barkScaleCells[barkIndex].rand) * ~freqResolution).asInteger;
 	xOverPoint_m1 = xOverPoint - 1;
@@ -62,6 +63,41 @@
 		}
 	};
 	temparray;
+};
+
+~crossoverVertical = {|parents, size|
+	var xOverPoint, newComplex, real, imag;
+	/*	rand = exprand(0.001, 1.0);*/
+	xOverPoint = 1.0.rand;
+
+	real = (parents[0].real * xOverPoint) + (parents[1].real * (1.0 - xOverPoint));
+	imag = (parents[0].imag * xOverPoint) + (parents[1].imag * (1.0 - xOverPoint));
+
+	newComplex =real.as(Signal).complex(imag.as(Signal));
+	// newComplex[idx].real.normalizeMagnitude;
+
+	newComplex;
+};
+
+~crossoverVerticalPolar = {|parents, size|
+	var xOverPoint, newComplex, polar, newPolar, zeroArray;
+	/*	rand = exprand(0.001, 1.0);*/
+	xOverPoint = 1.0.rand;
+	xOverPoint.postln;
+
+	polar = (parents.size).collect{|idx|
+		parents[idx].asPolar};
+
+	zeroArray = size.collect{};
+	newPolar = Polar(zeroArray, zeroArray);
+
+
+	// Iterate over parents
+	newPolar.rho = (polar[0].rho * xOverPoint) + (polar[1].rho * (1.0 - xOverPoint));
+	newPolar.theta = (polar[0].theta * xOverPoint) + (polar[1].theta * (1.0 - xOverPoint));
+
+	newComplex = newPolar.polarToComplexSignal;
+	newComplex;
 };
 
 // Frequency spectrum envelope for attenuating high frequencies
@@ -99,14 +135,13 @@
 
 // Irfft with audio envelope to create a more impulse-like amplitude curve (in case there's artefacts in the ir tail)
 ~newGeneration = {|item, cosTable, audioEnv|
-	var y;
 	(item.real.irfft(item.imag, cosTable) * audioEnv).normalize;
 };
 
 ~newGenerationArray = {|array, cosTable, audioEnv|
 	var y;
 	array.size.collect{|i|
-		(array[i].real.irfft(array[i].imag, cosTable)).normalize;
+		(array[i].real.irfft(array[i].imag, cosTable) * audioEnv).normalize;
 	};
 };
 
@@ -342,141 +377,140 @@
 
 	newComplex = polar.polarToComplexSignal;
 
-	};
+};
 
-	/*~geneSteal =
+/*~geneSteal =
 
-	~geneSwap =*/
+~geneSwap =*/
 
-	// Zero the phase. Doesn't seem to work properly. Look at linear phase
-	~zeroPhase = {|item|
-		var polar, newComplex, size;
-		size = item.real.size;
-		polar = item.asPolar;
+// Zero the phase. Doesn't seem to work properly. Look at linear phase
+~zeroPhase = {|item|
+	var polar, newComplex, size;
+	size = item.real.size;
+	polar = item.asPolar;
 
-		size.do{|i|
-			polar.theta[i] = 0.0};
+	size.do{|i|
+		polar.theta[i] = 0.0};
 
-		newComplex = polar.polarToComplexSignal
-	};
+	newComplex = polar.polarToComplexSignal
+};
 
-	~counter = {
-		var counter = ~pebble + 1;
-		counter % 2 };
+~counter = {
+	var counter = ~pebble + 1;
+	counter % 2 };
 
-	// For multiplying two spectrums. TODO: multiply polar
-	~multiplyComplex = {|items|
-		var newItem = Signal.newClear(items[0].size).asComplex;
-		newItem.real = items[0].real * items[1].real;
-		newItem.imag = items[0].imag * items[1].imag;
+// For multiplying two spectrums. TODO: multiply polar
+~multiplyComplex = {|items|
+	var newItem = Signal.newClear(items[0].size).asComplex;
+	newItem.real = items[0].real * items[1].real;
+	newItem.imag = items[0].imag * items[1].imag;
 
-		newItem;
-	};
+	newItem;
+};
 
-	~multiplyPolar = {|items|
-		var polar, polarRho, polarTheta, newComplex;
-		polarRho = (items[0].asPolar.rho * items[1].asPolar.rho).normalize(0, 1.0);
-		polarTheta = items[0].asPolar.theta * items[1].asPolar.theta;
-		polar = Polar(polarRho, polarTheta);
-		newComplex = polar.polarToComplexSignal;
-		newComplex;
-	};
+~multiplyPolar = {|items|
+	var polar, polarRho, polarTheta, newComplex;
+	polarRho = (items[0].asPolar.rho * items[1].asPolar.rho).normalize(0, 1.0);
+	polarTheta = items[0].asPolar.theta * items[1].asPolar.theta;
+	polar = Polar(polarRho, polarTheta);
+	newComplex = polar.polarToComplexSignal;
+	newComplex;
+};
 
-	~prepConvolve = {|buffer, fftSize|
-		var bufSize, spectrum;
-		bufSize = PartConv.calcBufSize(fftSize, buffer);
-		spectrum = Buffer.alloc(s, bufSize, 1);
-		spectrum.preparePartConv(buffer.normalize, fftSize);
-		s.sync;
-		spectrum;
-	};
+~prepConvolve = {|buffer, fftSize|
+	var bufSize, spectrum;
+	bufSize = PartConv.calcBufSize(fftSize, buffer);
+	spectrum = Buffer.alloc(s, bufSize, 1);
+	spectrum.preparePartConv(buffer.normalize, fftSize);
+	s.sync;
+	spectrum;
+};
 
-	// UGen for playing new irs.
-	SynthDef(\bufPlay,
-		{|buf, panPos, index, slicePoint, envirSpectralShape, specCentAvgBus, envCentAvgBus, distanceBus, mixerBus, nyquist, volume, windowSize|
-			var source, spectralShape, spectralShapeAvg, distance, averageTrig, specCentAvg, envSpecCentroidBus, envSpecCentroidAvgBus;
-			source = PlayBuf.ar(1, buf, doneAction: 2);
-			envSpecCentroidBus = In.kr(envirSpectralShape); // Spectral centroid measured by microphones
-			envSpecCentroidAvgBus = In.kr(envCentAvgBus);
-			spectralShape = FluidSpectralShape.kr(source, select: [\centroid], windowSize: windowSize);
-			// Average the difference between the environments spectral centroid and the ir spectral centroid over 1-second windows
-			distance = AverageOutput.kr(((spectralShape - envSpecCentroidBus) / nyquist).clip(-1.0, 1.0).squared, Impulse.kr(1));
-			// Sample and hold the average of the distance between the spectral centroid of the individual to the environment (Average of 1 second);
-			// In.kr(envCentAvgBus).poll;
-			distance = Latch.kr(distance, DelayN.kr(Impulse.kr(0), 1, 1.0));
-			// Sample and hold the difference between the average of a short(er) of the environment and the average of the last 10 seconds of the environment. Gives an estimate of the impulse responses impact on the environment. "slicepoint" refers to the slice point identified by running FluCoMa's novelty slicer on the spectrum of the ir buffer
-			averageTrig = DelayN.kr(Impulse.kr(0), slicePoint, slicePoint);
-			specCentAvg = AverageOutput.kr(envSpecCentroidBus, averageTrig);
-			specCentAvg = Latch.kr(((specCentAvg - envSpecCentroidAvgBus) / nyquist).squared, averageTrig);
-			source = Pan2.ar(source, panPos);
-			Out.kr(specCentAvgBus, specCentAvg);
-			// Out.kr(~specCentBus, spectralShapeAvg);
-			Out.kr(distanceBus, distance);
-			Out.ar(mixerBus, source * In.kr(volume))
-	}).add;
-
-
-	SynthDef(\mixer,
-		{|buf, panPos|
-			var source;
-			source = In.ar(~mixerBus, 2);
-			source = Limiter.ar(source, 0.9);
-			Out.ar(~mainOut, (source * ~masterVol.kr));
-			Out.ar(~toBlackhole, source);
-	}).add;
-
-	SynthDef(\soundIn,
-		{
-			var source, shapes, averageSpecCent;
-			source = Mix(SoundIn.ar(~micInStereo));
-			shapes = FluidSpectralShape.kr(source, [\centroid,\spread], windowSize: 2048);
-			averageSpecCent = AverageOutput.kr(shapes[0], Impulse.kr(0.1));
-			// shapes = OnePole.kr(shapes);
-			Out.kr(~envCentAvg, averageSpecCent);
-			Out.kr(~envCent, shapes[0]);
-			Out.kr(~envSpread, shapes[1]);
-	}).add;
-
-	SynthDef(\feedBack,
-		{|irBuffer, fftSize, fadeTime = 2, gate = 1|
-			var source, convolution, out, amplitude, ampSel, env;
-			source = SoundIn.ar(~micInStereo);
-			amplitude = RMS.kr(source * 10, 10);
-			env = EnvGen.kr(Env.asr(fadeTime, releaseTime: fadeTime), gate, doneAction: 2).sqrt;
-			convolution = PartConv.ar(source, 4096, irBuffer);
-			out = XFade2.ar(source, convolution, ~convolveMix.kr);
-			Out.ar(~mixerBus, (out * ~feedbackVol.kr) * (1.0 - amplitude).clip(0.0, 1.0) * env);
-	}).add;
-
-	SynthDef(\rec,
-		{| envBuf, popBuf|
-			var phasor, env, sourceEnv, sourcePop, recPop, recEnv;
-			phasor = Phasor.ar(0, BufRateScale.kr(envBuf), 0, BufFrames.kr(envBuf));
-			env = EnvGen.kr(Env([0,1,1,0], [0.1, 0.8, 0.1], [-4, 1 ,4]), 1.0, timeScale: BufFrames.kr(envBuf) * SampleDur.ir, doneAction: 2);
-			sourcePop = In.ar(~mixerBus, 2);
-			sourceEnv = Mix(SoundIn.ar(~micInStereo));
-			recPop = BufWr.ar(Mix(sourcePop) * env, popBuf, phasor, loop:0);
-			recEnv = BufWr.ar(sourceEnv * env, envBuf, phasor, loop:0);
-	}).add;
-
-	~playBufs =  {|buffers, slicePoints|
-		buffers.do({|i, idx|
-			var size = buffers.size;
-			var waitTime = (1.0 / size).rrand(1.5);
-			Synth(\bufPlay, [\buf, i, \panPos, -1.0.rrand(1.0), \slicePoint, slicePoints[idx] / s.sampleRate, \specCentAvgBus, ~specCentAvgBus[idx], \envCentAvgBus, ~envCentAvg, \envirSpectralShape, ~envCent, \distanceBus, ~distanceBus[idx], \mixerBus, ~mixerBus, \nyquist, ~nyquist, \volume, ~irVolume, \windowSize, 2048], target: ~synthGrp);
-			waitTime.wait;
-		});
-	};
+// UGen for playing new irs.
+SynthDef(\bufPlay,
+	{|buf, panPos, index, slicePoint, envirSpectralShape, specCentAvgBus, envCentAvgBus, distanceBus, mixerBus, nyquist, volume, windowSize|
+		var source, spectralShape, spectralShapeAvg, distance, averageTrig, specCentAvg, envSpecCentroidBus, envSpecCentroidAvgBus;
+		source = PlayBuf.ar(1, buf, doneAction: 2);
+		envSpecCentroidBus = In.kr(envirSpectralShape); // Spectral centroid measured by microphones
+		envSpecCentroidAvgBus = In.kr(envCentAvgBus);
+		spectralShape = FluidSpectralShape.kr(source, select: [\centroid], windowSize: windowSize);
+		// Average the difference between the environments spectral centroid and the ir spectral centroid over 1-second windows
+		distance = AverageOutput.kr(((spectralShape - envSpecCentroidBus) / nyquist).clip(-1.0, 1.0).squared, Impulse.kr(1));
+		// Sample and hold the average of the distance between the spectral centroid of the individual to the environment (Average of 1 second);
+		// In.kr(envCentAvgBus).poll;
+		distance = Latch.kr(distance, DelayN.kr(Impulse.kr(0), 1, 1.0));
+		// Sample and hold the difference between the average of a short(er) of the environment and the average of the last 10 seconds of the environment. Gives an estimate of the impulse responses impact on the environment. "slicepoint" refers to the slice point identified by running FluCoMa's novelty slicer on the spectrum of the ir buffer
+		averageTrig = DelayN.kr(Impulse.kr(0), slicePoint, slicePoint);
+		specCentAvg = AverageOutput.kr(envSpecCentroidBus, averageTrig);
+		specCentAvg = Latch.kr(((specCentAvg - envSpecCentroidAvgBus) / nyquist).squared, averageTrig);
+		source = Pan2.ar(source, panPos);
+		Out.kr(specCentAvgBus, specCentAvg);
+		// Out.kr(~specCentBus, spectralShapeAvg);
+		Out.kr(distanceBus, distance);
+		Out.ar(mixerBus, source * In.kr(volume))
+}).add;
 
 
-	// Function for crossfading between feedback synths. Crossfade is needed when introducing a new buffer to PartConv. Uses a crude language-based counter with global variables (~pebble is there to keep maintain the counter outside of the function)
-	~xFadeFbConvolve = {|buffers, fftSize, fadeTime = 2|
-		var buf, spectrum;
-		buf = buffers.choose;
-		spectrum = ~prepConvolve.(buf, 2048);
-		s.sync;
-		~feedbackSynths[~pebble].set(\gate, 0);
-		~pebble = ~counter.();
-		~feedbackSynths[~pebble] = Synth(\feedBack, [\irBuffer, spectrum.normalize, \fftSize, fftSize], target: ~convolveGrp);
-	};
-	
+SynthDef(\mixer,
+	{|buf, panPos|
+		var source;
+		source = In.ar(~mixerBus, 2);
+		source = Limiter.ar(source, 0.9);
+		Out.ar(~mainOut, (source * ~masterVol.kr));
+		Out.ar(~toBlackhole, source);
+}).add;
+
+SynthDef(\soundIn,
+	{
+		var source, shapes, averageSpecCent;
+		source = Mix(SoundIn.ar(~micInStereo));
+		shapes = FluidSpectralShape.kr(source, [\centroid,\spread], windowSize: 2048);
+		averageSpecCent = AverageOutput.kr(shapes[0], Impulse.kr(0.1));
+		// shapes = OnePole.kr(shapes);
+		Out.kr(~envCentAvg, averageSpecCent);
+		Out.kr(~envCent, shapes[0]);
+		Out.kr(~envSpread, shapes[1]);
+}).add;
+
+SynthDef(\feedBack,
+	{|irBuffer, fftSize, fadeTime = 2, gate = 1|
+		var source, convolution, out, amplitude, ampSel, env;
+		source = SoundIn.ar(~micInStereo);
+		amplitude = RMS.kr(source * 10, 10);
+		env = EnvGen.kr(Env.asr(fadeTime, releaseTime: fadeTime), gate, doneAction: 2).sqrt;
+		convolution = PartConv.ar(source, 4096, irBuffer);
+		out = XFade2.ar(source, convolution, ~convolveMix.kr);
+		Out.ar(~mixerBus, (out * ~feedbackVol.kr) * (1.0 - amplitude).clip(0.0, 1.0) * env);
+}).add;
+
+SynthDef(\rec,
+	{| envBuf, popBuf|
+		var phasor, env, sourceEnv, sourcePop, recPop, recEnv;
+		phasor = Phasor.ar(0, BufRateScale.kr(envBuf), 0, BufFrames.kr(envBuf));
+		env = EnvGen.kr(Env([0,1,1,0], [0.1, 0.8, 0.1], [-4, 1 ,4]), 1.0, timeScale: BufFrames.kr(envBuf) * SampleDur.ir, doneAction: 2);
+		sourcePop = In.ar(~mixerBus, 2);
+		sourceEnv = Mix(SoundIn.ar(~micInStereo));
+		recPop = BufWr.ar(Mix(sourcePop) * env, popBuf, phasor, loop:0);
+		recEnv = BufWr.ar(sourceEnv * env, envBuf, phasor, loop:0);
+}).add;
+
+~playBufs =  {|buffers, slicePoints|
+	buffers.do({|i, idx|
+		var size = buffers.size;
+		var waitTime = (1.0 / size).rrand(1.5);
+		Synth(\bufPlay, [\buf, i, \panPos, -1.0.rrand(1.0), \slicePoint, slicePoints[idx] / s.sampleRate, \specCentAvgBus, ~specCentAvgBus[idx], \envCentAvgBus, ~envCentAvg, \envirSpectralShape, ~envCent, \distanceBus, ~distanceBus[idx], \mixerBus, ~mixerBus, \nyquist, ~nyquist, \volume, ~irVolume, \windowSize, 2048], target: ~synthGrp);
+		waitTime.wait;
+	});
+};
+
+
+// Function for crossfading between feedback synths. Crossfade is needed when introducing a new buffer to PartConv. Uses a crude language-based counter with global variables (~pebble is there to keep maintain the counter outside of the function)
+~xFadeFbConvolve = {|buffers, fftSize, fadeTime = 2|
+	var buf, spectrum;
+	buf = buffers.choose;
+	spectrum = ~prepConvolve.(buf, 2048);
+	s.sync;
+	~feedbackSynths[~pebble].set(\gate, 0);
+	~pebble = ~counter.();
+	~feedbackSynths[~pebble] = Synth(\feedBack, [\irBuffer, spectrum.normalize, \fftSize, fftSize], target: ~convolveGrp);
+};
