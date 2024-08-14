@@ -1,10 +1,12 @@
+~visuals = false; // For multiplying the complex spectrum of individuals
+
 ~multiplyOn = true; // For multiplying the complex spectrum of individuals
 
 ~mutationOn = true;
 
 ~zeroPhaseOn = false;
 
-~mutationWidth = 100; // Measured in frequencies
+~mutationWidth = 0.2;
 
 ~xOverProb = 0.7; // Probability of crossover (0 - 1)
 
@@ -29,6 +31,11 @@
 ~envRecLength = 2;
 
 ~mutationCoeff = 0.5;
+
+~adultAge = 5;
+~retirementAge = 10;
+
+~deathProb = 0.5;
 
 ~ancestralMemory = 4; // How many generations (as audio buffers) are stored
 ~sigBufRedundancy = 4; // For storing and freeing ir buffers
