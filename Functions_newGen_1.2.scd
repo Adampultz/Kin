@@ -45,7 +45,6 @@
 // Crossover function for EA. Uses the Bark scale. First a random discrete section of the bark scale is chosen, and then a random point in that section. Crossover happens in both the real and imaginary value arrays. TODO: try doing crossover on rho in the polar representation (no theta).
 ~crossover = {|parents, size|
 	var xOverPoint, xOverPoint_m1, size_m1, xOverArray, newInd, temparray, barkIndex;
-	/*	rand = exprand(0.001, 1.0);*/
 	temparray = 2.collect{2.collect{2.collect{}}};
 	barkIndex = (~barkScale.size - 1).rand;
 	xOverPoint = ((~barkScale[barkIndex] + ~barkScaleCells[barkIndex].rand) * ~freqResolution).asInteger;
@@ -62,6 +61,7 @@
 			};
 		}
 	};
+
 	temparray;
 };
 
@@ -81,7 +81,6 @@
 
 ~crossoverVerticalPolar = {|parents, size|
 	var xOverPoint, newComplex, polar, newPolar, zeroArray;
-	/*	rand = exprand(0.001, 1.0);*/
 	xOverPoint = 1.0.rand;
 	xOverPoint.postln;
 
@@ -111,24 +110,41 @@
 };
 
 // Combine two parents. Combines the lower spectrum of each with the upper spectrum of the other. Consider introducing a probabilty of flipping high and low spectrums. ToDO: remove rfft argument
-~combine2 = {|newPop, rfftSize|
+~combine2 = {|newPop|
 	var idx = 0;
 	var popSize = newPop.size;
-	var newInd = (popSize).collect{2.collect{}};
+	var newInd = popSize.collect{2.collect{}};
 	var newComplex;
 
 
 	popSize.collect{|ind|
 		var nextInd = (ind + 1) % 2;
-		2.collect{|compl|
+		2.collect{|compl| // Iterate over complex and real values
 			newInd[idx][compl] = newPop[ind][0][compl] ++ newPop[nextInd][1][compl];
 		};
 		idx = idx + 1;
 	};
 
-	newComplex = (popSize).collect{|ind|
+	newComplex = popSize.collect{|ind|
 		newInd[ind][0].complex(newInd[ind][1])
 	};
+
+	newComplex;
+};
+
+
+~combine1 = {|newPop|
+	var newInd = 2.collect{};
+	var newComplex;
+	var first = 2.rand;
+	var second = (first + 1) % 2;
+
+
+	2.collect{|compl| // Iterate over complex and real values
+		newInd[compl] = newPop[first][0][compl] ++ newPop[second][1][compl];
+	};
+
+	newComplex = newInd[0].complex(newInd[1]);
 
 	newComplex;
 };
@@ -229,8 +245,6 @@
 
 	array = array.flatten;
 
-	"coupleArray: %".format(array).postln;
-
 	a = Array.randNoRep(numCouples, 0, array.size - 1);
 
 	a.size.collect{|i|
@@ -239,17 +253,13 @@
 };
 
 // Encapsulates crossover and recombination
-~newPop = {|population, rfftSize, parents, xOverProb|
+~newPop = {|population, rfftSize, parents|
 	var popSize, couples, xOver, combine;
 	popSize = population.size;
 	couples = [population[parents[0]], population[parents[1]]];
 
-	if (xOverProb.coin == true, {
-		xOver = ~crossover.(couples, rfftSize);
-		combine = ~combine2.(xOver);
-	}, {
-		// "No crossover".postln;
-		combine = couples});
+	xOver = ~crossover.(couples, rfftSize);
+	combine = ~combine1.(xOver);
 
 	combine;
 };
@@ -333,21 +343,25 @@
 };
 
 ~mutationRho = {|individual, width = 1|
-	var polar, window, negWindow, globalRhoMax, centreFreq, windowGain, winRhoMax = 0, barkIndex, maxRealGain, fftWinSize, newComplex;
-	fftWinSize = ~freqResolution * width;
+	var polar, window, negWindow, globalRhoMax, centreFreq, windowGain, winRhoMax = 0, barkIndex, maxRealGain, fftWinSize, newComplex, fftWidth, fftWidthHalf;
 	polar = individual.asPolar;
-	// window = ~hammingInv.(~freqResolution * width);
-	window = Signal.hanningWindow(fftWinSize).asArray; // Creates a Hanning envelope for the Freqeuncy window that is being mutated
-	negWindow = 1 - window;
 	globalRhoMax = polar.rho[polar.rho.maxIndex]; // Get value of peak rho
 	barkIndex = (~barkScale.size - 1).rand;
-	centreFreq = (~barkScale[barkIndex] + ~barkScaleCells[barkIndex].rand) * ~freqResolution;
-	"Mutation centre frequency: %".format(centreFreq / ~freqResolution).postln;
+	fftWidth = (~barkScaleCells[barkIndex] * width * ~freqResolution).asInteger;
+	fftWidthHalf = (fftWidth / 2).asInteger;
+	window = Signal.hanningWindow(fftWidth).asArray; // Creates a Hanning envelope for the Freqeuncy window that is being mutated
+	negWindow = 1 - window;
+
+	// "Bark Index: %".format(barkIndex).postln;
+	centreFreq = ((~barkScale[barkIndex] + ~barkScaleCells[barkIndex].rand) * ~freqResolution).asInteger;
+	centreFreq = centreFreq.clip(fftWidthHalf, polar.rho.size - fftWidthHalf);
+	// "Centre freq: %".format(centreFreq).postln;
+	// "Mutation frequency range: %".format([(centreFreq - fftWidthHalf), centreFreq, centreFreq + (fftWidthHalf - 1)]).postln;
 
 	// Get the local maximum of the frequency window
-	fftWinSize.asInteger.collect{|n|
+	fftWidth.asInteger.collect{|n|
 		var idx, valRho;
-		idx = (centreFreq - (fftWinSize / 2).asInteger) + n;
+		idx = centreFreq - fftWidthHalf + n;
 		valRho = polar.rho[idx];
 
 		if(valRho > winRhoMax, {
@@ -359,16 +373,16 @@
 	window = 1 + (window * maxRealGain * ~mutationCoeff);
 
 	if (0.5.coin == true, {
-		fftWinSize.asInteger.collect{|n|
+		fftWidth.collect{|n|
 			var idx, valRho, gainModifier;
-			idx = (centreFreq - (fftWinSize / 2)).asInteger + n;
+			idx = centreFreq - fftWidthHalf + n;
 			valRho = polar.rho[idx] * window[n];
 			polar.rho[idx] = valRho;
 		};
 	}, {
-		fftWinSize.asInteger.collect{|n|
+		fftWidth.collect{|n|
 			var idx, valRho, gainModifier;
-			idx = (centreFreq - (fftWinSize / 2)).asInteger + n;
+			idx = centreFreq - fftWidthHalf + n;
 			valRho = polar.rho[idx] * negWindow[n];
 			polar.rho[idx] = valRho;
 		};
@@ -495,10 +509,11 @@ SynthDef(\rec,
 }).add;
 
 ~playBufs =  {|buffers, slicePoints|
-	buffers.do({|i, idx|
-		var size = buffers.size;
+	var size = buffers.size;
+	var scrambleArray = Array.fill(size, {|i| i}).scramble;
+	scrambleArray.do({|i|
 		var waitTime = (1.0 / size).rrand(1.5);
-		Synth(\bufPlay, [\buf, i, \panPos, -1.0.rrand(1.0), \slicePoint, slicePoints[idx] / s.sampleRate, \specCentAvgBus, ~specCentAvgBus[idx], \envCentAvgBus, ~envCentAvg, \envirSpectralShape, ~envCent, \distanceBus, ~distanceBus[idx], \mixerBus, ~mixerBus, \nyquist, ~nyquist, \volume, ~irVolume, \windowSize, 2048], target: ~synthGrp);
+		Synth(\bufPlay, [\buf, buffers[i], \panPos, -1.0.rrand(1.0), \slicePoint, slicePoints[i] / s.sampleRate, \specCentAvgBus, ~specCentAvgBus[i], \envCentAvgBus, ~envCentAvg, \envirSpectralShape, ~envCent, \distanceBus, ~distanceBus[i], \mixerBus, ~mixerBus, \nyquist, ~nyquist, \volume, ~irVolume, \windowSize, 2048], target: ~synthGrp);
 		waitTime.wait;
 	});
 };
