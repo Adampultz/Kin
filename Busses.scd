@@ -16,9 +16,9 @@
 
 ~envSpread = Bus.control(s);
 
-~distanceBus = 50.collect{Bus.control(s)};
+~distanceBus = 100.collect{Bus.control(s)};
 
-~specCentAvgBus = 50.collect{Bus.control(s)};
+~specCentAvgBus = 100.collect{Bus.control(s)};
 
 // ~specCentBus = 50.collect{Bus.control(s)};
 
