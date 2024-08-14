@@ -101,8 +101,11 @@ s.waitForBoot{
 	"MIDI.scd".loadRelative;
 
 	~makeControllers.();
-	"Visualisation.scd".loadRelative;
-	~freqResponsevisualise.(~parentFreqResp);
+
+	if (~visuals, {
+		"Visualisation.scd".loadRelative;
+		~freqResponsevisualise.(~parentFreqResp);
+	});
 
 	s.sync;
 
@@ -110,4 +113,5 @@ s.waitForBoot{
 	~populations.(0, ~newSigs[0], ~parentFreqResp.asList);
 
 	"Done".postln;
-};
+	};
+	
