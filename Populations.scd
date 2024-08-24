@@ -1,18 +1,39 @@
 ~populations = {|popIndex, signals, newGeneration|
-	var newSigs, newSigBufs, run, featureBuffersGeno, newGen, spectralCentroidGeno, spectralCentroidGenoParents, environment, slicePointArray, spectralCentroidDevPheno, spectralCentroidDevPhenoParents, genCounter, envRecOn, envRecBuf, popOutputRecBuf, age, lifeCycle, adultIndices, adults, seniors, adultFitness;
+	var newSigs, newBufs, run, featureBuffersGeno, newGen, spectralCentroidGeno, spectralCentroidGenoParents, environment, slicePointArray, spectralCentroidDevPheno, spectralCentroidDevPhenoParents, genCounter, envRecOn, envRecBuf, popOutputRecBuf, age, lifeCycle, adultIndices, adults, seniors, adultFitness, pebble, inSynth, feedbackSynths, convolveSpectrum, initConvolveBuf;
+	feedbackSynths = 2.collect{};
 
 	adults = [].asList;
 	seniors = [].asList;
 	envRecOn = false;
 	genCounter = 0;
-	newSigs = signals.deepCopy;
+	newSigs = signals.deepCopy.asList;
+
+	pebble = 0;
+
+	initConvolveBuf = Buffer.loadCollection(s, newSigs.choose);
+
+	s.sync;
+
+	convolveSpectrum = ~prepConvolve.(initConvolveBuf, ~convolveFftsize).normalize;
+	s.sync;
+	convolveSpectrum.plot;
+	// convolveSpectrum = ~convolveSpectrum.normalize;
+
+	s.sync;
+
+
+	inSynth = Synth(\soundIn, [\audioIn, popIndex, \envCentAvg, ~envCentAvg[popIndex], \envCent, ~envCent[popIndex], \envSpread, ~envSpread[popIndex]], target: ~envGrp);
+
+	feedbackSynths[0] = Synth(\feedBack, [\irBuffer, convolveSpectrum.bufnum, \fftSize, ~convolveFftsize, \feedbackVol, ~feedbackVol[popIndex], \convolveMix, ~convolveMix[popIndex], \micChan, popIndex], target: ~convolveGrp);
+
+	s.sync;
 
 	newGen = ~sigBufRedundancy.collect{[].asList};
-	newSigBufs = ~sigBufRedundancy.collect{};
-	newSigBufs[genCounter] = newSigs.size.collect{|i| Buffer.loadCollection(s, newSigs[i][0..~maximumSize])}; // Load Signal buffers to standard buffers
+	newBufs = ~sigBufRedundancy.collect{};
+	newBufs[genCounter] = newSigs.size.collect{|i| Buffer.loadCollection(s, newSigs[i][0..~maximumSize])}; // Load Signal buffers to standard buffers
 	spectralCentroidGeno = newSigs.size.collect{}.asList; // Spectral centroid of the irs spectrum
 	slicePointArray = newSigs.size.collect{}.asList; // List for holding individual slice points of buffers
-	featureBuffersGeno = newSigBufs[genCounter].size.collect{Buffer(s, numChannels: 1)}.asList; // Spectral centroid of the irs spectrum estimated by the microphones
+	featureBuffersGeno = newBufs[genCounter].size.collect{Buffer(s, numChannels: 1)}.asList; // Spectral centroid of the irs spectrum estimated by the microphones
 	spectralCentroidDevPheno = newSigs.size.collect{}.asList; // Deviation of the spectral centroid of individuals compared to the spectral centroid of the environment
 
 	newGen[genCounter] = newGeneration.deepCopy;
@@ -47,7 +68,7 @@
 			Routine{ 1.do {
 				envRecOn = true;
 				"Recording environment on".postln;
-				environment = ~recEnv.(envRecBuf, popOutputRecBuf, ~rfftParams[0], ~rfftParams[2]);
+				environment = ~recEnv.(envRecBuf, popOutputRecBuf, ~rfftParams[0], ~rfftParams[2], popIndex);
 				(popOutputRecBuf.numFrames / s.sampleRate).wait;
 				// "Recording environment off".postln;
 				envRecOn = false;
@@ -55,7 +76,7 @@
 		});
 
 		// Determine slice points for all irs and extract statistics (genotype)
-		newSigBufs[cycleGenInd].size.collect{|i|
+		newBufs[cycleGenInd].size.collect{|i|
 			var slice, slicePoint;
 			// Expand featureBuffers list if needed
 			if (i >= featureBuffersGeno.size, {featureBuffersGeno.add(Buffer(s, numChannels: 1));
@@ -65,8 +86,8 @@
 
 
 			// Identify slice points for measuring spectral centroid
-			// slice = ~ampSlice.(newSigBufs[cycleGenInd][i]);
-			slice = newSigBufs[cycleGenInd][i].ampSlice(s, windowSize: 2048);
+			// slice = ~ampSlice.(newBufs[cycleGenInd][i]);
+			slice = newBufs[cycleGenInd][i].ampSlice(s, windowSize: 2048);
 
 			// Store slicepoints for use in real-time centroid detection
 			slice.get(1, {|msg|
@@ -79,7 +100,7 @@
 
 			s.sync;
 			// Extract statistics about ir
-			FluidBufSpectralShape.processBlocking(s, newSigBufs[cycleGenInd][i], 0, slicePointArray[i], select: [\centroid], features: featureBuffersGeno[i], windowSize: 2048);
+			FluidBufSpectralShape.processBlocking(s, newBufs[cycleGenInd][i], 0, slicePointArray[i], select: [\centroid], features: featureBuffersGeno[i], windowSize: 2048);
 
 			featureBuffersGeno[i].loadToFloatArray(action: {|array|  spectralCentroidGeno[i] = array.asArray.mean}); // Load from buffer to array of floats
 		};
@@ -87,13 +108,13 @@
 		s.sync;
 
 		// Playback routine of irs
-		~playBufs.(newSigBufs[cycleGenInd], slicePointArray);
+		~playBufs.(popIndex, newBufs[cycleGenInd], slicePointArray, popIndex);
 
 		// Update spectral features of each individual, extracted from the environment (phenotype)
-		newSigBufs[cycleGenInd].size.do({|i|
+		newBufs[cycleGenInd].size.do({|i|
 			if(i < spectralCentroidDevPheno.size, {
-				spectralCentroidDevPheno[i] = ~specCentAvgBus[i].getSynchronous},{
-				spectralCentroidDevPheno.add(~specCentAvgBus[i].getSynchronous)
+				spectralCentroidDevPheno[i] = ~specCentAvgBus[popIndex][i].getSynchronous},{
+				spectralCentroidDevPheno.add(~specCentAvgBus[popIndex][i].getSynchronous)
 			});
 		});
 
@@ -104,9 +125,12 @@
 		s.sync;
 
 		inf.do{
-			var currentGen, parentsGen, children, numAdults, deathCount;
+			var currentGen, parentsGen, children, numAdults, deathCount, modIDs, numNewIndividuals, newTempBuffers;
 
 			deathCount = 0;
+			numNewIndividuals = 0;
+
+			modIDs = [].asList; // List for holding indexes of changed individuals
 
 			"Generation: %".format(genCounter).postln;
 
@@ -136,6 +160,7 @@
 						spectralCentroidDevPheno[i] = nil;
 						slicePointArray[i] = nil;
 						featureBuffersGeno[i] = nil;
+						newSigs[i] = nil;
 						"Death of Individual %".format(i).postln;
 						deathCount = deathCount + 1;
 					});
@@ -153,6 +178,8 @@
 				spectralCentroidDevPheno.remove(nil);
 				slicePointArray.remove(nil);
 				featureBuffersGeno.remove(nil);
+				newSigs.remove(nil);
+				newBufs[parentsGen].remove(nil);
 			};
 
 			// "Age size: %".format(age.size).postln;
@@ -166,7 +193,7 @@
 
 			// Deviation, spectral centroid, and standard deviation (SD)
 
-/*			adultIndices = lifeCycle.indicesOfEqual(1);
+			/*			adultIndices = lifeCycle.indicesOfEqual(1);
 			"Adults: %".format(adultIndices).postln;*/
 
 			stats = ~stats.(spectralCentroidGeno.asArray.normalizeSum);
@@ -224,11 +251,12 @@
 						children.add(~newPop.(newGen[parentsGen], ~rfftParams[1], couples[i]));
 						age.add(0);
 						lifeCycle.add(0);
+						numNewIndividuals = numNewIndividuals + 1;
 					})
 				};
 
 				// children = children;
-				children.postln;
+				// children.postln;
 
 
 				newGen[cycleGenInd] = (newGen[parentsGen] ++ children).asList;
@@ -240,6 +268,7 @@
 					if ((1.0 / newGen[cycleGenInd].size).coin == true, {
 						var which = newGen[cycleGenInd].size.rand;
 						newGen[cycleGenInd][which] = ~mutationRho.(newGen[cycleGenInd][which], ~mutationWidth);
+						if (modIDs.indicesOfEqual.(which) == nil, {modIDs.add(which)});
 						"Mutation of individual %".format(which).postln;
 					});
 				};
@@ -254,6 +283,7 @@
 					newGen[cycleGenInd].add(newMultiply);
 					age.add(0);
 					lifeCycle.add(0);
+					numNewIndividuals = numNewIndividuals + 1;
 					"Multiply".postln;
 				});
 			});
@@ -262,6 +292,7 @@
 				if (0.1.coin == true, {
 					var which = newGen[cycleGenInd].size.rand;
 					newGen[cycleGenInd][which] = ~zeroPhase.(newGen[cycleGenInd][which]);
+					if (modIDs.indicesOfEqual.(which) == nil, {modIDs.add(which)});
 					"Zero phases on %".format(which).postln;
 				});
 			});
@@ -275,13 +306,14 @@
 					}, {
 						newGen[cycleGenInd][which] = ~insertEnvAudio.(newGen[cycleGenInd][which], envRecBuf, ~envInsertWidth);
 						"Environment Audio Insert %".format(which).postln;
-					})
+					});
+					if (modIDs.indicesOfEqual.(which) == nil, {modIDs.add(which)});
 				});
 			});
 
 			"Envelope".postln;
 
-			if (~spectralEnvelopeOn == true,{ // TODO: polar multiplication
+			if (~spectralEnvelopeOn == true,{
 				newGen[cycleGenInd].do{|item, idx|
 					var polar;
 					polar = item.asPolar;
@@ -296,37 +328,95 @@
 					newGen[cycleGenInd].add(~parentFreqResp.choose);
 					age.add(5);
 					lifeCycle.add(1);
+					numNewIndividuals = numNewIndividuals + 1;
 				})
 			});
 
 			// For plotting spectrums
 			// ~monitor = newGen[cycleGenInd];
 
-			"New Signals".postln;
+			// "New Signals".postln;
 
-			newSigs = newGen[cycleGenInd].size.collect{|i|
-				~newGeneration.(newGen[cycleGenInd][i], ~rfftParams[2], ~audioEnv);
+			"Mod IDs: %".format(modIDs).postln;
+
+			// "Test discrep: %".format([numNewIndividuals, newSigs.size, newGen[cycleGenInd].size]).postln;
+
+			// Update already existing signals with mutations, etc.
+			modIDs.do{|i|
+				if (i < (newSigs.size - 1), {
+					newSigs[i] = ~newGeneration.(newGen[cycleGenInd][i], ~rfftParams[2], ~audioEnv);
+				});
 			};
+
+			numNewIndividuals.collect{|i|
+				var idx, newIndividual;
+				idx = newGen[cycleGenInd].size - numNewIndividuals + i;
+				newIndividual = ~newGeneration.(newGen[cycleGenInd][idx], ~rfftParams[2], ~audioEnv);
+				newSigs.add(newIndividual);
+			};
+
+			// "Test discrep again: %".format([numNewIndividuals, newSigs.size, newGen[cycleGenInd].size]).postln;
+
+			/*	newSigs = newGen[cycleGenInd].size.collect{|i|
+			~newGeneration.(newGen[cycleGenInd][i], ~rfftParams[2], ~audioEnv);
+			};
+			*/
 
 			if (~visuals, {
 				{~freqResponsevisualise.(newGen[cycleGenInd])}.defer;
 			});
 
+			// Free buffers not in use.
+			/*			newBufs[(cycleGenInd + 1) % ~sigBufRedundancy].do({ arg i;
+			if(i != nil, {
+			i.free;
+			i = nil;
+			});
+			});*/
+
+			s.sync;
+
+
+			// newBufs[cycleGenInd] = newSigs.size.collect{|i| Buffer.loadCollection(s, newSigs[i][0..~maximumSize])};
+
+			modIDs.do{|i|
+				if (i < (newBufs[parentsGen].size - 1), {
+					newBufs[parentsGen][i] = Buffer.loadCollection(s, newSigs[i][0..~maximumSize]);
+					s.sync;
+				});
+			};
+
 			"Free Buffers".postln;
 
+			if (newTempBuffers != nil, {
+				newTempBuffers.do{|i| i.free};
+				newTempBuffers = nil;
+			});
+
 			// Free buffers not in use.
-			newSigBufs[(cycleGenInd + 1) % ~sigBufRedundancy].do({ arg i;
+	/*		newBufs[(cycleGenInd + 1) % ~sigBufRedundancy].do({ arg i;
 				if(i != nil, {
 					i.free;
 					i = nil;
 				});
-			});
+			});*/
 
 			s.sync;
-
 			"New Buffers".postln;
 
-			newSigBufs[cycleGenInd] = newSigs.size.collect{|i| Buffer.loadCollection(s, newSigs[i][0..~maximumSize])};
+			newTempBuffers = numNewIndividuals.collect{|i|
+				var idx, newIndividual;
+				idx = newGen[cycleGenInd].size - numNewIndividuals + i;
+				newIndividual =  Buffer.loadCollection(s, newSigs[idx][0..~maximumSize]);
+				s.sync;
+				newIndividual;
+			};
+
+			"New temporary buffers: %".format(newTempBuffers).postln;
+
+			newBufs[cycleGenInd] = newBufs[parentsGen] ++ newTempBuffers;
+
+			"New Buffers: %".format(newBufs[cycleGenInd]).postln;
 
 			s.sync;
 
@@ -334,57 +424,72 @@
 				Routine{ 1.do {
 					envRecOn = true;
 					// "Recording environment on".postln;
-					environment = ~recEnv.(envRecBuf, popOutputRecBuf, ~rfftParams[0], ~rfftParams[2]);
+					environment = ~recEnv.(envRecBuf, popOutputRecBuf, ~rfftParams[0], ~rfftParams[2], popIndex);
 					(popOutputRecBuf.numFrames / s.sampleRate).wait;
 					// "Recording environment off".postln;
 					envRecOn = false;
 				}}.play;
 			});
 
+			s.sync;
+
 			"Slice point generation".postln;
 
-			newSigBufs[cycleGenInd].size.collect{|i|
+			newBufs[cycleGenInd].size.collect{|i|
 				var slice, slicePoint;
+
+				// "Index of slicing: %".format(i).postln;
 
 				// Expand featureBuffers list if needed
 				if (i >= featureBuffersGeno.size, {featureBuffersGeno.add(Buffer(s, numChannels: 1));
 					spectralCentroidGeno.add(0);
-					slicePointArray.add(0)
+					slicePointArray.add(0);
+					s.sync;
 				});
 
 				// Identify slice points for measuring spectral centroid
-				// slice = ~ampSlice.(newSigBufs[cycleGenInd][i]);
-				slice = newSigBufs[cycleGenInd][i].ampSlice(s, windowSize: 2048);
+				slice = newBufs[cycleGenInd][i].ampSlice(s, windowSize: 2048);
+
+				// "Slice: %".format(slice).postln;
 
 				// Store slicepoints for use in real-time centroid detection
 				slice.get(1, {|msg|
 					if (i >= slicePointArray.size, {
-						slicePointArray.add(msg);
+						slicePointArray.add(msg.asInteger);
 					}, {
-						slicePointArray[i] = msg;
+						slicePointArray[i] = msg.asInteger;
 					});
 				});
 
+				// "Slice array: %".format(slicePointArray[i]).postln;
+
 				s.sync;
 
-				FluidBufSpectralShape.processBlocking(s, newSigBufs[cycleGenInd][i], 0, slicePointArray[i], select: [\centroid], features: featureBuffersGeno[i], windowSize: 2048);
+				FluidBufSpectralShape.processBlocking(s, newBufs[cycleGenInd][i], 0, slicePointArray[i], select: [\centroid], features: featureBuffersGeno[i], windowSize: 2048);
 
-				featureBuffersGeno[i].loadToFloatArray(action: {|array|  spectralCentroidGeno[i] = array.asArray.mean});
+				s.sync;
+
+				featureBuffersGeno[i].loadToFloatArray(action: {|array| spectralCentroidGeno[i] = array.asArray.mean});
+				s.sync;
 			};
 
 			if (0.5.coin == true, {
 				"New convolution spectrum".postln;
-				~xFadeFbConvolve.(newSigBufs[cycleGenInd], ~convolveFftsize, 2)});
+				~xFadeFbConvolve.(newBufs[cycleGenInd], feedbackSynths, ~convolveFftsize, pebble, 2, popIndex)});
 
 			s.sync;
 
-			~playBufs.(newSigBufs[cycleGenInd], slicePointArray);
+			"Play new buffers".postln;
+
+			~playBufs.(popIndex, newBufs[cycleGenInd], slicePointArray, popIndex);
+
+			"Update spectral features";
 
 			// Update spectral features of each individual
-			newSigBufs[cycleGenInd].size.do({|i|
+			newBufs[cycleGenInd].size.do({|i|
 				if(i < spectralCentroidDevPheno.size, {
-					spectralCentroidDevPheno[i] = ~specCentAvgBus[i].getSynchronous},{
-					spectralCentroidDevPheno.add(~specCentAvgBus[i].getSynchronous)
+					spectralCentroidDevPheno[i] = ~specCentAvgBus[popIndex][i].getSynchronous},{
+					spectralCentroidDevPheno.add(~specCentAvgBus[popIndex][i].getSynchronous)
 				});
 			});
 
@@ -392,7 +497,8 @@
 
 			s.sync;
 
-		};
+			};
 
 	});
-};
+	};
+	

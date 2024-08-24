@@ -91,7 +91,7 @@
 
 	~impResponseBuf.loadToFloatArray(action: {|array|
 		a = array;
-		{~irView.setData(array, channels: 1, samplerate: s.sampleRate.asInteger)}.defer});
+		{~irView.setData(array[0..(array.size / 2).asInteger], channels: 1, samplerate: s.sampleRate.asInteger)}.defer});
 
 	s.sync;
 

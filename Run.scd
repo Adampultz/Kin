@@ -39,7 +39,7 @@ s.plotTree;
 
 ~multiplyOn = true; // For multiplying the complex spectrum of individuals
 
-~mutationWidth = 0.2; // Measured in frequencies. Good values could be between 10 and 200. TODO scale logarithmically
+~mutationWidth = 0.5; // Measured in frequencies. Good values could be between 10 and 200. TODO scale logarithmically
 
 ~ancestorReturn = true;
 ~ancestorReturnProb = 0.1;
@@ -59,5 +59,5 @@ s.plotTree;
 ~distanceModerator = 0; // If using the lower distance to the spectral centroid. Currently not in use
 
 // The width of the snippet of the environments spectrum that will be inserted into an individual. 0 is nothing, 1 equals the entire range between cut point and the next value on the bark scale. If set very high, it works like a sampler, inserting recognizable audio into irs.
-~envInsertWidth = 0.2;
+~envInsertWidth = 0.4;
 )

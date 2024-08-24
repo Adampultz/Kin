@@ -8,6 +8,7 @@ s.options.numBuffers = 2048;
 
 s.options.outDevice_(
 	// "MacBook Pro Speakers"
+	// "External Headphones"
 	// "ZoomAudioD"
 	"Fireface UCX (23732049)"
 	// "Fireface + Blackhole"
@@ -53,7 +54,7 @@ s.waitForBoot{
 
 	s.sync;
 
-	~inSynth = Synth(\soundIn, target: ~envGrp);
+	/*~inSynth = Synth(\soundIn, target: ~envGrp);*/
 
 	~objPath = "/Users/adammac2023/Documents/Musik-business/Adam/2024/Speculative Sound Synthesis/Code_27.07.2024/Impulse_responses/";
 
@@ -86,12 +87,10 @@ s.waitForBoot{
 
 	s.sync;
 
-	~convolveSpectrum = ~prepConvolve.(~newSigBufs.choose, ~convolveFftsize);
-	~convolveSpectrum = ~convolveSpectrum.normalize;
+	/*~convolveSpectrum = ~prepConvolve.(~newSigBufs.choose, ~convolveFftsize);
+	~convolveSpectrum = ~convolveSpectrum.normalize;*/
 
 	s.sync;
-
-	~feedbackSynths[0] = Synth(\feedBack, [\irBuffer, ~convolveSpectrum.bufnum, \fftSize, ~convolveFftsize], target: ~convolveGrp);
 
 	Synth(\mixer, target: ~mixerGrp);
 
@@ -110,7 +109,7 @@ s.waitForBoot{
 	s.sync;
 
 	// Initialise the first and so far, only community
-	~populations.(0, ~newSigs[0], ~parentFreqResp.asList);
+	 ~populations.(0, ~newSigs[0], ~parentFreqResp.asList);
 
 	"Done".postln;
 	};
