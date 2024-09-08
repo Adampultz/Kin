@@ -42,7 +42,6 @@
 ~genCounter = 0;
 ~numPop = 4;
 ~cycleGenInd = 0;
-~pebble = 0;
 ~convolveFftsize = 4096;
 
 s.latency = 0.1;

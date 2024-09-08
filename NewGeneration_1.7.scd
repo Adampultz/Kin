@@ -109,7 +109,8 @@ s.waitForBoot{
 	s.sync;
 
 	// Initialise the first and so far, only community
-	 ~populations.(0, ~newSigs[0], ~parentFreqResp.asList);
+	~populations.(0, ~newSigs[0], ~parentFreqResp.asList);
+	// ~populations.(1, ~newSigs[0], ~parentFreqResp.asList);
 
 	"Done".postln;
 	};
