@@ -14,16 +14,18 @@ if (MIDIClient.sources.detect { |e| e.device.containsi("nanoKONTROL2") } != nil)
 		~masterVol.set(val.linlin(0, 127, 0.0, 1.0));
 	}, 0, 0,~nanoKtl_source);
 
+	3.collect{|n|
 	MIDIFunc.cc({|val|
-		~feedbackVol.set(val.linlin(0, 127, 0.0, 1.0));
-	}, 1, 0,~nanoKtl_source);
+		~feedbackVol[n].set(val.linlin(0, 127, 0.0, 1.0));
+		}, 1 + (n * 2), 0,~nanoKtl_source);
 
 	MIDIFunc.cc({|val|
-		~irVolume.set(val.linlin(0, 127, 0.0, 1.0));
-	}, 2, 0,~nanoKtl_source);
+		~irVolume[n].set(val.linlin(0, 127, 0.0, 1.0));
+	}, 2 + (n * 2), 0,~nanoKtl_source);
 
 	MIDIFunc.cc({|val|
-		~convolveMix.set(val.linlin(0, 127, -1.0, 1.0));
-	}, 17, 0,~nanoKtl_source);
+		~convolveMix[n].set(val.linlin(0, 127, -1.0, 1.0));
+	}, 17 + (n * 2), 0,~nanoKtl_source);
+	}
 
 };

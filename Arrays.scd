@@ -12,6 +12,6 @@
 
 ~testSpecArray = 8.collect{}.asList;
 
-~feedbackSynths = 2.collect{};
+/*~feedbackSynths = 2.collect{};*/
 
 ~variancePlot = List(0);

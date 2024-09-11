@@ -15,7 +15,7 @@
 ~envInsert = true; // For inserting a snippet of the environment into the genome of an individual
 ~envInsertProb = 0.2;
 
-~spectralEnvelopeOn = true; // For attenuating the high frequencies of the spectrum
+~spectralEnvelopeOn = false; // For attenuating the high frequencies of the spectrum
 
 ~ancestorReturn = true;
 ~ancestorReturnProb = 0.1;
@@ -42,7 +42,6 @@
 ~genCounter = 0;
 ~numPop = 4;
 ~cycleGenInd = 0;
-~pebble = 0;
 ~convolveFftsize = 4096;
 
 s.latency = 0.1;
