@@ -20,10 +20,10 @@
 ~ancestorReturn = true;
 ~ancestorReturnProb = 0.1;
 // Fitness Variables. For balancing the parameters contributing to calculating the fitness function
-~slicepointCoeff = 1; // Biases toward shorter attcack
+~slicepointCoeff = 0; // Biases toward shorter attcack
 ~specCentDevGenoCoeff = 1.0; // The deviation of the spectral centroid, calculated from the genome
 ~specCentDevPhenoCoeff = 1.0; // The deviation of the spectral centroid, calculated from the phenome.
-~distanceModerator = 1; // If using the lower distance to the spectral centroid. Currently not in use
+~distanceModerator = 0; // If using the lower distance to the spectral centroid. Currently not in use
 
 // The width of the snippet of the environments spectrum that will be inserted into an individual. 0 is nothing, 1 equals the entire range between cut point and the next value on the bark scale
 ~envInsertWidth = 0.1;
@@ -45,8 +45,6 @@
 ~pebble = 0;
 ~convolveFftsize = 4096;
 
-s.latency = 0.1;
-
 ~toBlackhole = 16;
 
 ~mainOut = 0;
@@ -54,3 +52,5 @@ s.latency = 0.1;
 ~micInMono = 0;
 
 ~micInStereo = [0, 1];
+
+s.latency = 0.1;
