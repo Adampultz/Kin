@@ -1,7 +1,7 @@
 ~populations = {|popIndex, signals, newGeneration|
 	var newSigs, newBufs, run, featureBuffersGeno, newGen, spectralCentroidGeno, spectralCentroidGenoParents, environment, slicePointArray, spectralCentroidDevPheno, spectralCentroidDevPhenoParents, genCounter, envRecOn, envRecBuf, popOutputRecBuf, age, lifeCycle, adultIndices, adults, seniors, adultFitness, pebble, inSynth, feedbackSynths, convolveSpectrum, initConvolveBuf;
-	feedbackSynths = 2.collect{};
 
+	feedbackSynths = 2.collect{};
 	adults = [].asList;
 	seniors = [].asList;
 	envRecOn = false;
@@ -15,16 +15,12 @@
 	s.sync;
 
 	convolveSpectrum = ~prepConvolve.(initConvolveBuf, ~convolveFftsize).normalize;
-	s.sync;
-	convolveSpectrum.plot;
-	// convolveSpectrum = ~convolveSpectrum.normalize;
 
 	s.sync;
-
 
 	inSynth = Synth(\soundIn, [\audioIn, popIndex, \envCentAvg, ~envCentAvg[popIndex], \envCent, ~envCent[popIndex], \envSpread, ~envSpread[popIndex]], target: ~envGrp);
 
-	feedbackSynths[0] = Synth(\feedBack, [\irBuffer, convolveSpectrum.bufnum, \fftSize, ~convolveFftsize, \feedbackVol, ~feedbackVol[popIndex], \convolveMix, ~convolveMix[popIndex], \micChan, popIndex], target: ~convolveGrp);
+	feedbackSynths[0] = Synth(\feedBack, [\irBuffer, convolveSpectrum.bufnum, \fftSize, ~convolveFftsize, \feedbackVol, ~feedbackVol[popIndex], \convolveMix, ~convolveMix[popIndex], \micChan, 1], target: ~convolveGrp);
 
 	s.sync;
 
@@ -167,7 +163,7 @@
 				};
 			};
 
-			"DeathCount: %".format(deathCount).postln;
+			// "DeathCount: %".format(deathCount).postln;
 
 			deathCount.do{|i|
 				"test".postln;
@@ -182,12 +178,11 @@
 				newBufs[parentsGen].remove(nil);
 			};
 
-			// "Age size: %".format(age.size).postln;
-			// "Adults size: %".format(adults.size).postln;
-			"Parent gen size: %".format(newGen[parentsGen].size).postln;
+
+/*			"Parent gen size: %".format(newGen[parentsGen].size).postln;
 			"Life cycle Size: %".format(lifeCycle.size).postln;
 			"Life cycle: %".format(lifeCycle).postln;
-			"Age Size: %".format(age.size).postln;
+			"Age Size: %".format(age.size).postln;*/
 
 			distanceBelow = ~distanceBelow.(spectralCentroidGeno); // Measure how far below the spectral centroid of each individual is to the mean spectral centroid
 
@@ -208,7 +203,7 @@
 			// Sum various audio features and statistics to a single fitness measure
 			// fitness = ((stats[0] * ~specCentDevGenoCoeff) + (spectralCentroidDevPheno.asArray.normalizeSum * ~specCentDevPhenoCoeff) + ((1 / slicePointArray.asArray.normalizeSum) * ~slicepointCoeff) + distanceBelow);
 
-			"Fitness Size: %".format(fitness.size).postln;
+			// "Fitness Size: %".format(fitness.size).postln;
 
 			// Set children's fitness to 0 to avoid them entering the parent race
 			adultFitness = newGen[parentsGen].size.collect{|i|
@@ -219,7 +214,7 @@
 
 			adultFitness = adultFitness.normalizeSum;
 
-			"AdultFitness: %".format(adultFitness).postln;
+			// "AdultFitness: %".format(adultFitness).postln;
 			// fitness = fitness.normalizeSum;
 
 			// ~variancePlot.add(stats[1]);
@@ -239,16 +234,25 @@
 
 			if (numAdults >= 4, {
 				parents = adultFitness.wChooseNorepeat((numAdults * 0.7).round.asInteger);
-				"Parents: %".format(parents).postln;
-				couples = parents.tupleRandNoRep(2, (numAdults / 2).round.asInteger);
+				// "Parents: %".format(parents).postln;
+				couples = parents.tupleRandNoRepRandSize(2, 3, (numAdults / 2).round.asInteger);
 
 				"Couples: %".format(couples).postln;
 
 				children = [].asList;
+
 				couples.size.collect{|i|
 
 					if (~xOverProb.coin, {
-						children.add(~newPop.(newGen[parentsGen], ~rfftParams[1], couples[i]));
+						var newPop;
+						if(couples[i].size == 3, {
+							newPop = ~newPop3Parents.(newGen[parentsGen], ~rfftParams[1], couples[i])[0];
+							"3 parents".postln;
+						}, {
+							newPop = ~newPop.(newGen[parentsGen], ~rfftParams[1], couples[i], 0.2)[0]});
+
+						children.add(newPop);
+
 						age.add(0);
 						lifeCycle.add(0);
 						numNewIndividuals = numNewIndividuals + 1;
@@ -267,7 +271,8 @@
 				newGen[cycleGenInd].size.do{
 					if ((1.0 / newGen[cycleGenInd].size).coin == true, {
 						var which = newGen[cycleGenInd].size.rand;
-						newGen[cycleGenInd][which] = ~mutationRho.(newGen[cycleGenInd][which], ~mutationWidth);
+						var gainMod = 0.2.rrand(0.8); // Gain modification factor (0 - 1)
+						newGen[cycleGenInd][which] = ~mutationRho.(newGen[cycleGenInd][which], ~mutationWidth, gainMod);
 						if (modIDs.indicesOfEqual.(which) == nil, {modIDs.add(which)});
 						"Mutation of individual %".format(which).postln;
 					});
@@ -337,7 +342,7 @@
 
 			// "New Signals".postln;
 
-			"Mod IDs: %".format(modIDs).postln;
+			// "Mod IDs: %".format(modIDs).postln;
 
 			// "Test discrep: %".format([numNewIndividuals, newSigs.size, newGen[cycleGenInd].size]).postln;
 
@@ -416,7 +421,7 @@
 
 			newBufs[cycleGenInd] = newBufs[parentsGen] ++ newTempBuffers;
 
-			"New Buffers: %".format(newBufs[cycleGenInd]).postln;
+			// "New Buffers: %".format(newBufs[cycleGenInd]).postln;
 
 			s.sync;
 
@@ -433,7 +438,7 @@
 
 			s.sync;
 
-			"Slice point generation".postln;
+			// "Slice point generation".postln;
 
 			newBufs[cycleGenInd].size.collect{|i|
 				var slice, slicePoint;
@@ -473,9 +478,11 @@
 				s.sync;
 			};
 
-			if (0.5.coin == true, {
+			if (0.5.coin, {
 				"New convolution spectrum".postln;
-				~xFadeFbConvolve.(newBufs[cycleGenInd], feedbackSynths, ~convolveFftsize, pebble, 2, popIndex)});
+				pebble = ~xFadeFbConvolve.(newBufs[cycleGenInd], feedbackSynths, ~convolveFftsize, pebble, 2, popIndex);
+				"Pebble %".format(pebble).postln;
+			});
 
 			s.sync;
 
@@ -483,7 +490,9 @@
 
 			~playBufs.(popIndex, newBufs[cycleGenInd], slicePointArray, popIndex);
 
-			"Update spectral features";
+			// 5.0.wait;
+
+			// "Update spectral features";
 
 			// Update spectral features of each individual
 			newBufs[cycleGenInd].size.do({|i|
