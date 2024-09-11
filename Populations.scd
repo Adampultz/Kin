@@ -213,7 +213,7 @@
 			// Set children's fitness to 0 to avoid them entering the parent race
 			adultFitness = newGen[parentsGen].size.collect{|i|
 				if (lifeCycle[i] != 0, {
-					((stats[0][i] * ~specCentDevGenoCoeff) + (spectralCentroidDevPheno.asArray.normalizeSum[i] * ~specCentDevPhenoCoeff) + ((1 / slicePointArray.asArray.normalizeSum[i]) * ~slicepointCoeff) + distanceBelow[i]);
+					((stats[0][i] * ~specCentDevGenoCoeff) + (spectralCentroidDevPheno.asArray.normalizeSum[i] * ~specCentDevPhenoCoeff) + ((1 / slicePointArray.asArray.normalizeSum[i]) * ~slicepointCoeff) + distanceBelow[i] * ~distanceModerator);
 				}, {0})
 			};
 
