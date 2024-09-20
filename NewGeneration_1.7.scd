@@ -2,9 +2,9 @@ s.options.memSize_(2.pow(20));
 s.options.sampleRate_(48000);
 s.options.numInputBusChannels_(6);
 s.options.numOutputBusChannels_(40);
-s.options.hardwareBufferSize = 64;
+s.options.hardwareBufferSize = 128;
 s.recHeaderFormat = "wav";
-s.options.numBuffers = 2048;
+s.options.numBuffers = 4096;
 
 s.options.outDevice_(
 	// "MacBook Pro Speakers"
@@ -92,7 +92,7 @@ s.waitForBoot{
 
 	s.sync;
 
-	Synth(\mixer, target: ~mixerGrp);
+	Synth(\mixer, [\amp, ~masterVol], target: ~mixerGrp);
 
 	s.sync;
 
@@ -108,9 +108,19 @@ s.waitForBoot{
 
 	s.sync;
 
+	"Initialise populations".postln;
 	// Initialise the first and so far, only community
 	~populations.(0, ~newSigs[0], ~parentFreqResp.asList);
-	// ~populations.(1, ~newSigs[0], ~parentFreqResp.asList);
+	"One".postln;
+	s.sync;
+/*	~populations.(1, ~newSigs[0], ~parentFreqResp.asList);
+	"Two".postln;
+		s.sync;
+	~populations.(2, ~newSigs[0], ~parentFreqResp.asList);
+	"Three".postln;
+		s.sync;
+	~populations.(3, ~newSigs[0], ~parentFreqResp.asList);
+	"Four".postln;*/
 
 	"Done".postln;
 	};
