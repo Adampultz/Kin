@@ -6,12 +6,10 @@
 
 ~tasks = ~numPop.collect{};
 
-~newGen = 2.collect{~ancestralMemory.collect{}};
+~newGen = ~numEnvironments.collect{~ancestralMemory.collect{}};
 
-~newSigs = 2.collect{~ancestralMemory.collect{}};
+~newSigs = ~numEnvironments.collect{~ancestralMemory.collect{}};
 
 ~testSpecArray = 8.collect{}.asList;
-
-/*~feedbackSynths = 2.collect{};*/
 
 ~variancePlot = List(0);
