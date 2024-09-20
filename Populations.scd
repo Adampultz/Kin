@@ -1,14 +1,18 @@
 ~populations = {|popIndex, signals, newGeneration|
-	var newSigs, newBufs, run, featureBuffersGeno, newGen, spectralCentroidGeno, spectralCentroidGenoParents, environment, slicePointArray, spectralCentroidDevPheno, spectralCentroidDevPhenoParents, genCounter, envRecOn, envRecBuf, popOutputRecBuf, age, lifeCycle, adultIndices, adults, seniors, adultFitness, pebble, inSynth, feedbackSynths, convolveSpectrum, initConvolveBuf;
+	var newSigs, newBufs, run, featureBuffersGeno, newGen, spectralCentroidGeno, spectralCentroidGenoParents, environment, slicePointArray, spectralCentroidDevPheno, spectralCentroidDevPhenoParents, genCounter, envRecOn, envRecBuf, popOutputRecBuf, age, lifeCycle, adultIndices, adults, seniors, adultFitness, pebble, inSynth, feedbackSynths, convolveSpectrum, initConvolveBuf, ghostsFR, ghostsIR, nextPop, oldestGen;
 
 	feedbackSynths = 2.collect{};
 	adults = [].asList;
 	seniors = [].asList;
+	ghostsFR  = [].asList;
+	ghostsIR  = [].asList;
 	envRecOn = false;
 	genCounter = 0;
 	newSigs = signals.deepCopy.asList;
 
-	pebble = 0;
+	nextPop = nil;
+
+	pebble = 0; // Initialise counter for feedback synths
 
 	initConvolveBuf = Buffer.loadCollection(s, newSigs.choose);
 
@@ -20,7 +24,7 @@
 
 	inSynth = Synth(\soundIn, [\audioIn, popIndex, \envCentAvg, ~envCentAvg[popIndex], \envCent, ~envCent[popIndex], \envSpread, ~envSpread[popIndex]], target: ~envGrp);
 
-	feedbackSynths[0] = Synth(\feedBack, [\irBuffer, convolveSpectrum.bufnum, \fftSize, ~convolveFftsize, \feedbackVol, ~feedbackVol[popIndex], \convolveMix, ~convolveMix[popIndex], \micChan, 1], target: ~convolveGrp);
+	feedbackSynths[0] = Synth(\feedBack, [\irBuffer, convolveSpectrum.bufnum, \fftSize, ~convolveFftsize, \feedbackVol, ~feedbackVol[popIndex], \convolveMix, ~convolveMix[popIndex], \micChan, popIndex, \thresHoldBus, ~feedbackThreshBus, \pan, ((1 / ~numEnvironments) * popIndex)], target: ~convolveGrp);
 
 	s.sync;
 
@@ -57,16 +61,15 @@
 	~tasks[popIndex] = Task({ // Initial playback and statistics
 		var distanceBelow, stats, parents,couples, cycleGenInd = 0, fitness;
 
-		"Generation: %".format(genCounter).postln;
+		if (~postInfo[popIndex], {
+			"Population %, generation: %".format([popIndex, genCounter]).postln;});
 
 		// Routine for starting and stopping the recording of the environment
 		if (envRecOn == false, {
 			Routine{ 1.do {
 				envRecOn = true;
-				"Recording environment on".postln;
 				environment = ~recEnv.(envRecBuf, popOutputRecBuf, ~rfftParams[0], ~rfftParams[2], popIndex);
 				(popOutputRecBuf.numFrames / s.sampleRate).wait;
-				// "Recording environment off".postln;
 				envRecOn = false;
 			}}.play;
 		});
@@ -94,6 +97,8 @@
 				});
 			});
 
+			slice.free;
+
 			s.sync;
 			// Extract statistics about ir
 			FluidBufSpectralShape.processBlocking(s, newBufs[cycleGenInd][i], 0, slicePointArray[i], select: [\centroid], features: featureBuffersGeno[i], windowSize: 2048);
@@ -104,7 +109,7 @@
 		s.sync;
 
 		// Playback routine of irs
-		~playBufs.(popIndex, newBufs[cycleGenInd], slicePointArray, popIndex);
+		~playBufs.(popIndex, newBufs[cycleGenInd], slicePointArray, ~bufPlayMaxWaitTime, ~numEnvironments);
 
 		// Update spectral features of each individual, extracted from the environment (phenotype)
 		newBufs[cycleGenInd].size.do({|i|
@@ -113,8 +118,6 @@
 				spectralCentroidDevPheno.add(~specCentAvgBus[popIndex][i].getSynchronous)
 			});
 		});
-
-		"onwards".postln;
 
 		genCounter = genCounter + 1;
 
@@ -128,7 +131,8 @@
 
 			modIDs = [].asList; // List for holding indexes of changed individuals
 
-			"Generation: %".format(genCounter).postln;
+			if (~postInfo[popIndex], {
+				"Population %, generation: %".format(popIndex, genCounter).postln});
 
 			parentsGen = cycleGenInd;
 
@@ -136,6 +140,16 @@
 
 			if(cycleGenInd > (~ancestralMemory - 1),
 				{cycleGenInd = 0});
+
+			oldestGen = (cycleGenInd + 1) % ~ancestralMemory;
+
+			// Free buffers of oldest generation
+			/*	if (newBufs[oldestGen] != nil, {
+			newBufs[oldestGen].do{|i|
+			i.free};
+			});*/
+
+			s.sync;
 
 			currentGen = newGen[cycleGenInd];
 
@@ -149,24 +163,50 @@
 				{(age[i] >= ~adultAge) && (age[i] < ~retirementAge)} {lifeCycle[i] = 1}
 				{age[i] >= ~retirementAge} {lifeCycle[i] = 2;
 					if(~deathProb.coin, {
+						ghostsFR.add(newGen[parentsGen][i].deepCopy);
+						ghostsIR.add(newSigs[i].copy);
 						newGen[parentsGen][i] = nil;
 						lifeCycle[i] = nil;
 						age[i] = nil;
 						spectralCentroidGeno[i] = nil;
 						spectralCentroidDevPheno[i] = nil;
 						slicePointArray[i] = nil;
+						newBufs[parentsGen][i].free;
+						newBufs[parentsGen][i] = nil;
+						featureBuffersGeno[i].free;
 						featureBuffersGeno[i] = nil;
 						newSigs[i] = nil;
-						"Death of Individual %".format(i).postln;
 						deathCount = deathCount + 1;
 					});
 				};
 			};
 
-			// "DeathCount: %".format(deathCount).postln;
+			if (~postInfo[popIndex], {
+				"Population %, number of Ghosts: %".format([popIndex, ghostsIR.size]).postln;});
+
+			if (~numEnvironments > 1, {
+				if (popIndex != (~numEnvironments - 1), {
+					if (nextPop == nil, {
+						if (ghostsFR.size >= ~newGenPopSize, {
+							var nextPopIndex = (popIndex + 1);
+
+							"New Population: %!".format(nextPopIndex).postln;
+							"Ghosts IR: %!".format(ghostsIR).postln;
+							"Ghosts FR: %!".format(ghostsFR).postln;
+							~populations.(nextPopIndex, ghostsIR, ghostsFR);
+							~tasks[nextPopIndex].start;
+							nextPop = 1;
+
+							ghostsFR = nil;
+							ghostsIR = nil;
+
+						});
+					});
+				});
+			});
+
 
 			deathCount.do{|i|
-				"test".postln;
 				newGen[parentsGen].remove(nil);
 				lifeCycle.remove(nil);
 				age.remove(nil);
@@ -178,8 +218,9 @@
 				newBufs[parentsGen].remove(nil);
 			};
 
+			// "Distance".postln;
 
-/*			"Parent gen size: %".format(newGen[parentsGen].size).postln;
+			/*			"Parent gen size: %".format(newGen[parentsGen].size).postln;
 			"Life cycle Size: %".format(lifeCycle.size).postln;
 			"Life cycle: %".format(lifeCycle).postln;
 			"Age Size: %".format(age.size).postln;*/
@@ -191,6 +232,7 @@
 			/*			adultIndices = lifeCycle.indicesOfEqual(1);
 			"Adults: %".format(adultIndices).postln;*/
 
+			// "Stats".postln;
 			stats = ~stats.(spectralCentroidGeno.asArray.normalizeSum);
 
 			/*			"Stats: %".format(stats[0]).postln;
@@ -205,10 +247,12 @@
 
 			// "Fitness Size: %".format(fitness.size).postln;
 
+			// "Fitness".postln;
+
 			// Set children's fitness to 0 to avoid them entering the parent race
 			adultFitness = newGen[parentsGen].size.collect{|i|
 				if (lifeCycle[i] != 0, {
-					((stats[0][i] * ~specCentDevGenoCoeff) + (spectralCentroidDevPheno.asArray.normalizeSum[i] * ~specCentDevPhenoCoeff) + ((1 / slicePointArray.asArray.normalizeSum[i]) * ~slicepointCoeff) + distanceBelow[i] * ~distanceModerator);
+					((stats[0][i] * ~specCentDevGenoCoeff) + (spectralCentroidDevPheno.asArray.normalizeSum[i] * ~specCentDevPhenoCoeff) + ((1.0 / slicePointArray.asArray.normalizeSum[i]) * ~slicepointCoeff) + distanceBelow[i]);
 				}, {0})
 			};
 
@@ -233,11 +277,12 @@
 			numAdults = lifeCycle.indicesOfEqual(1).size;
 
 			if (numAdults >= 4, {
-				parents = adultFitness.wChooseNorepeat((numAdults * 0.7).round.asInteger);
-				// "Parents: %".format(parents).postln;
-				couples = parents.tupleRandNoRepRandSize(2, 3, (numAdults / 2).round.asInteger);
+				parents = adultFitness.wChooseNorepeat((numAdults * ~parentFrac).round.asInteger);
+				/*				"Parents: %".format(parents).postln;
+				"Parents size: %".format(parents.size).postln;*/
+				couples = parents.tupleRandNoRepRandSize(2, 3, (parents.size * ~parentTuplesFrac).round.asInteger);
 
-				"Couples: %".format(couples).postln;
+				// "Couples: %".format(couples);
 
 				children = [].asList;
 
@@ -247,7 +292,6 @@
 						var newPop;
 						if(couples[i].size == 3, {
 							newPop = ~newPop3Parents.(newGen[parentsGen], ~rfftParams[1], couples[i])[0];
-							"3 parents".postln;
 						}, {
 							newPop = ~newPop.(newGen[parentsGen], ~rfftParams[1], couples[i], 0.2)[0]});
 
@@ -259,13 +303,18 @@
 					})
 				};
 
-				// children = children;
-				// children.postln;
-
 
 				newGen[cycleGenInd] = (newGen[parentsGen] ++ children).asList;
 
-			}, {newGen[cycleGenInd] = newGen[parentsGen]});
+			}, {newGen[cycleGenInd] = newGen[parentsGen].deepCopy});
+
+			if (~postInfo[popIndex], {
+				"Population %".format(popIndex).postln;
+				"Pop size: %".format(newGen[cycleGenInd].size).postln;
+				"Num children: %".format(children.size).postln;
+				"Num adults: %".format(numAdults).postln;
+				"Num retirees: %".format(newGen[cycleGenInd].size - children.size - numAdults).postln;
+			});
 
 			if (~mutationOn == true, {
 				newGen[cycleGenInd].size.do{
@@ -274,7 +323,7 @@
 						var gainMod = 0.2.rrand(0.8); // Gain modification factor (0 - 1)
 						newGen[cycleGenInd][which] = ~mutationRho.(newGen[cycleGenInd][which], ~mutationWidth, gainMod);
 						if (modIDs.indicesOfEqual.(which) == nil, {modIDs.add(which)});
-						"Mutation of individual %".format(which).postln;
+						// "Mutation of individual %".format(which).postln;
 					});
 				};
 			});
@@ -289,7 +338,7 @@
 					age.add(0);
 					lifeCycle.add(0);
 					numNewIndividuals = numNewIndividuals + 1;
-					"Multiply".postln;
+					// "Multiply".postln;
 				});
 			});
 
@@ -298,7 +347,7 @@
 					var which = newGen[cycleGenInd].size.rand;
 					newGen[cycleGenInd][which] = ~zeroPhase.(newGen[cycleGenInd][which]);
 					if (modIDs.indicesOfEqual.(which) == nil, {modIDs.add(which)});
-					"Zero phases on %".format(which).postln;
+					// "Zero phases on %".format(which).postln;
 				});
 			});
 
@@ -307,10 +356,10 @@
 					var which = newGen[cycleGenInd].size.rand;
 					if (0.5.coin == true, {
 						newGen[cycleGenInd][which] = ~insertEnvSpectrum.(newGen[cycleGenInd][which], environment[1], ~envInsertWidth);
-						"Environment Insert %".format(which).postln;
+						// "Environment Insert %".format(which).postln;
 					}, {
 						newGen[cycleGenInd][which] = ~insertEnvAudio.(newGen[cycleGenInd][which], envRecBuf, ~envInsertWidth);
-						"Environment Audio Insert %".format(which).postln;
+						// "Environment Audio Insert %".format(which).postln;
 					});
 					if (modIDs.indicesOfEqual.(which) == nil, {modIDs.add(which)});
 				});
@@ -328,23 +377,16 @@
 			});
 
 			if (~ancestorReturn == true, {
-				if (~ancestorReturnProb.coin == true,{
-					"Ancestor returns".postln;
-					newGen[cycleGenInd].add(~parentFreqResp.choose);
-					age.add(5);
-					lifeCycle.add(1);
-					numNewIndividuals = numNewIndividuals + 1;
-				})
+				if (genCounter >= ~adultAge, {
+					if (~ancestorReturnProb.coin == true, {
+						"Ancestor returns".postln;
+						newGen[cycleGenInd].add(~parentFreqResp.choose);
+						age.add(5);
+						lifeCycle.add(1);
+						numNewIndividuals = numNewIndividuals + 1;
+					});
+				});
 			});
-
-			// For plotting spectrums
-			// ~monitor = newGen[cycleGenInd];
-
-			// "New Signals".postln;
-
-			// "Mod IDs: %".format(modIDs).postln;
-
-			// "Test discrep: %".format([numNewIndividuals, newSigs.size, newGen[cycleGenInd].size]).postln;
 
 			// Update already existing signals with mutations, etc.
 			modIDs.do{|i|
@@ -360,68 +402,24 @@
 				newSigs.add(newIndividual);
 			};
 
-			// "Test discrep again: %".format([numNewIndividuals, newSigs.size, newGen[cycleGenInd].size]).postln;
-
-			/*	newSigs = newGen[cycleGenInd].size.collect{|i|
-			~newGeneration.(newGen[cycleGenInd][i], ~rfftParams[2], ~audioEnv);
-			};
-			*/
 
 			if (~visuals, {
-				{~freqResponsevisualise.(newGen[cycleGenInd])}.defer;
+				{~freqResponsevisualise.(newGen[cycleGenInd])}.defer
 			});
-
-			// Free buffers not in use.
-			/*			newBufs[(cycleGenInd + 1) % ~sigBufRedundancy].do({ arg i;
-			if(i != nil, {
-			i.free;
-			i = nil;
-			});
-			});*/
 
 			s.sync;
 
-
-			// newBufs[cycleGenInd] = newSigs.size.collect{|i| Buffer.loadCollection(s, newSigs[i][0..~maximumSize])};
-
-			modIDs.do{|i|
-				if (i < (newBufs[parentsGen].size - 1), {
-					newBufs[parentsGen][i] = Buffer.loadCollection(s, newSigs[i][0..~maximumSize]);
-					s.sync;
-				});
-			};
-
-			"Free Buffers".postln;
-
-			if (newTempBuffers != nil, {
-				newTempBuffers.do{|i| i.free};
-				newTempBuffers = nil;
-			});
-
 			// Free buffers not in use.
-	/*		newBufs[(cycleGenInd + 1) % ~sigBufRedundancy].do({ arg i;
+			newBufs[(cycleGenInd + 1) % ~sigBufRedundancy].do({ arg i;
 				if(i != nil, {
 					i.free;
 					i = nil;
 				});
-			});*/
+			});
 
 			s.sync;
-			"New Buffers".postln;
 
-			newTempBuffers = numNewIndividuals.collect{|i|
-				var idx, newIndividual;
-				idx = newGen[cycleGenInd].size - numNewIndividuals + i;
-				newIndividual =  Buffer.loadCollection(s, newSigs[idx][0..~maximumSize]);
-				s.sync;
-				newIndividual;
-			};
-
-			"New temporary buffers: %".format(newTempBuffers).postln;
-
-			newBufs[cycleGenInd] = newBufs[parentsGen] ++ newTempBuffers;
-
-			// "New Buffers: %".format(newBufs[cycleGenInd]).postln;
+			newBufs[cycleGenInd] = newSigs.size.collect{|i| Buffer.loadCollection(s, newSigs[i][0..~maximumSize])};
 
 			s.sync;
 
@@ -433,17 +431,30 @@
 					(popOutputRecBuf.numFrames / s.sampleRate).wait;
 					// "Recording environment off".postln;
 					envRecOn = false;
+
+					if (~envirIrOn, {
+						Routine{ 1.do {
+						if (~roomIrPlaying.not, {
+								var pan;
+							~roomIrPlaying = true;
+								pan = (1 / (~numEnvironments - 1)).clip(0.0, 1.0) * popIndex;
+								"Room IR of population: %".format(popIndex).postln;
+								environment[0].postln;
+						Synth(\simpleBufPlay, [\buf, environment[0], \ampBus, ~envirIrAmpBus[popIndex], \outBus, ~mixerBus, \panPos, pan]);
+								s.sync;
+
+							~roomIrPlaying = false;
+						});
+						}}.play;
+					});
+
 				}}.play;
 			});
 
 			s.sync;
 
-			// "Slice point generation".postln;
-
 			newBufs[cycleGenInd].size.collect{|i|
 				var slice, slicePoint;
-
-				// "Index of slicing: %".format(i).postln;
 
 				// Expand featureBuffers list if needed
 				if (i >= featureBuffersGeno.size, {featureBuffersGeno.add(Buffer(s, numChannels: 1));
@@ -455,8 +466,6 @@
 				// Identify slice points for measuring spectral centroid
 				slice = newBufs[cycleGenInd][i].ampSlice(s, windowSize: 2048);
 
-				// "Slice: %".format(slice).postln;
-
 				// Store slicepoints for use in real-time centroid detection
 				slice.get(1, {|msg|
 					if (i >= slicePointArray.size, {
@@ -466,7 +475,7 @@
 					});
 				});
 
-				// "Slice array: %".format(slicePointArray[i]).postln;
+				slice.free;
 
 				s.sync;
 
@@ -478,23 +487,24 @@
 				s.sync;
 			};
 
-			if (0.5.coin, {
-				"New convolution spectrum".postln;
-				pebble = ~xFadeFbConvolve.(newBufs[cycleGenInd], feedbackSynths, ~convolveFftsize, pebble, 2, popIndex);
-				"Pebble %".format(pebble).postln;
+			if (1.0.coin, {
+				var conVolveBuf;
+				// "New convolution spectrum".postln;
+
+				if (environment[0] != nil, {
+					conVolveBuf = [newBufs[cycleGenInd].choose, environment[0]].choose;
+				}, {
+					conVolveBuf = newBufs[cycleGenInd].choose});
+
+				pebble = ~xFadeFbConvolve.(conVolveBuf, feedbackSynths, ~convolveFftsize, pebble, 2, popIndex, ~feedbackThreshBus[popIndex], ~numEnvironments);
 			});
 
 			s.sync;
 
-			"Play new buffers".postln;
+			// "Play new buffers".postln;
 
-			~playBufs.(popIndex, newBufs[cycleGenInd], slicePointArray, popIndex);
+			~playBufs.(popIndex, newBufs[cycleGenInd], slicePointArray, ~bufPlayMaxWaitTime, ~numEnvironments);
 
-			// 5.0.wait;
-
-			// "Update spectral features";
-
-			// Update spectral features of each individual
 			newBufs[cycleGenInd].size.do({|i|
 				if(i < spectralCentroidDevPheno.size, {
 					spectralCentroidDevPheno[i] = ~specCentAvgBus[popIndex][i].getSynchronous},{
@@ -506,8 +516,7 @@
 
 			s.sync;
 
-			};
+		};
 
 	});
-	};
-	
+};
