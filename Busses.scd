@@ -18,9 +18,9 @@
 
 ~envSpread = ~numEnvironments.collect{Bus.control(s)};
 
-~distanceBus = ~numEnvironments.collect{100.collect{Bus.control(s)}};
+~distanceBus = ~numEnvironments.collect{~maxNumIndividuals.collect{Bus.control(s)}};
 
-~specCentAvgBus = ~numEnvironments.collect{100.collect{Bus.control(s)}};
+~specCentAvgBus = ~numEnvironments.collect{~maxNumIndividuals.collect{Bus.control(s)}};
 
 ~envirIrAmpBus = ~numEnvironments.collect{Bus.control(s).set(0.3)};
 
