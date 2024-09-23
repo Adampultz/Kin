@@ -23,6 +23,12 @@ s.plotTree;
 ~tasks[3].start;
 
 
+
+~postInfo[0] = true;
+~postInfo[1] = true;
+~postInfo[2] = true;
+~postInfo[3] = true;
+
 ~feedbackVol[0].set(0.3); // 0 - 1. Controls the gain of the microphone. NanoKontrol: slider 2
 
 ~irVolume[0].set(0.2); // 0 - 1. Volume of the playback of the irs. NanoKontrol: slider 3
@@ -45,10 +51,10 @@ s.plotTree;
 
 ~numEnvironments.collect{|i|
 	~irVolume[i].set(0.8);
-	~feedbackVol[i].set(0.5);
+	~feedbackVol[i].set(0.4);
 	~feedbackThreshBus[i].set(0.01);
 	~convolveMix[i].set(0.5);
-	~envirIrAmpBus[i].set(0.3);
+	~envirIrAmpBus[i].set(0.2);
 }
 
 (
