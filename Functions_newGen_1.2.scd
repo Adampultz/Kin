@@ -12,6 +12,7 @@
 			slice.(buffer);
 		}
 		);
+		s.sync;
 	};
 	slice.(buffer);
 	indices;
@@ -275,13 +276,13 @@
 
 // Old code not in use. generate if from fr
 ~impResponse = {|freqResponse, cosTable, env|
-	var ifft, curve;
+	var ifft, curve, buf;
 
 	ifft * env;
 
-	s.sync;
+	buf = Buffer.loadCollection(s, (ifft)).normalize;
 
-	Buffer.loadCollection(s, (ifft)).normalize
+	s.sync;
 };
 
 // // Generate random numbers without repetition
@@ -379,6 +380,8 @@
 	envRecBuf.loadToFloatArray(action: {|array|
 		envRecBufSignal = array.as(Signal);
 	});
+
+	s.sync;
 
 	popRecBuf.loadToFloatArray(action: {|array|
 		popRecSignal = array.as(Signal);
@@ -527,7 +530,8 @@ SynthDef(\bufPlay,
 		averageTrig = DelayN.kr(Impulse.kr(0), slicePoint, slicePoint);
 		specCentAvg = AverageOutput.kr(envSpecCentroidBus, averageTrig);
 		specCentAvg = Latch.kr(((specCentAvg - envSpecCentroidAvgBus) / nyquist).squared, averageTrig);
-		source = PanX.ar(~numEnvironments, source, panPos);
+		// source = PanX.ar(~numEnvironments, source, panPos).scope;
+		source = PanAz.ar(~numEnvironments, source, panPos, orientation: 0.0);
 		Out.kr(specCentAvgBus, specCentAvg);
 		// Out.kr(~specCentBus, spectralShapeAvg);
 		Out.kr(distanceBus, distance);
@@ -537,7 +541,7 @@ SynthDef(\bufPlay,
 SynthDef(\mixer,
 	{|numChans, amp|
 		var source;
-		source = In.ar(~mixerBus, ~numEnvironments);
+		source = LeakDC.ar(In.ar(~mixerBus, ~numEnvironments));
 		source = Limiter.ar(source, 0.9);
 		Out.ar(~mainOut, (source * In.kr(amp).lag(0.1)));
 		Out.ar(~toBlackhole, source);
@@ -558,12 +562,13 @@ SynthDef(\soundIn,
 SynthDef(\feedBack,
 	{|irBuffer, fftSize, fadeTime = 2, gate = 1, mixerBus, feedbackVol, convolveMix, micChan, thresHoldBus, pan|
 		var source, convolution, out, amplitude, ampSel, env;
-		source = SoundIn.ar(micChan);
-		amplitude = RMS.kr(source * 10, 10);
-		env = EnvGen.kr(Env.asr(fadeTime, releaseTime: fadeTime), gate, doneAction: 2).sqrt;
-		convolution = PartConv.ar(source, fftSize, irBuffer);
+		source = LeakDC.ar(SoundIn.ar(micChan));
+		amplitude = RMS.kr(source * 10, 10).clip(0.0, 1.0);
+		env = EnvGen.kr(Env.asr(fadeTime, releaseTime: fadeTime), gate, doneAction: 2);
+		convolution = LeakDC.ar(PartConv.ar(source, fftSize, irBuffer)).sanitize;
 		out = XFade2.ar(source, convolution, In.kr(convolveMix));
 		out = Compander.ar(out, out, In.kr(thresHoldBus), slopeAbove: 0.5);
+		out = Limiter.ar(out, 0.9);
 		out = PanX.ar(~numEnvironments, out, pan);
 		Out.ar(mixerBus, (out * In.kr(feedbackVol)) * (1.0 - amplitude).clip(0.0, 1.0) * env);
 }).add;
@@ -573,8 +578,8 @@ SynthDef(\rec,
 		var phasor, env, sourceEnv, sourcePop, recPop, recEnv;
 		phasor = Phasor.ar(0, BufRateScale.kr(envBuf), 0, BufFrames.kr(envBuf));
 		env = EnvGen.kr(Env([0,1,1,0], [0.1, 0.8, 0.1], [-4, 1 ,4]), 1.0, timeScale: BufFrames.kr(envBuf) * SampleDur.ir, doneAction: 2);
-		sourcePop = Mix(In.ar(mixerBus));
-		sourceEnv = Mix(SoundIn.ar(micChan));
+		sourcePop = Mix(In.ar(mixerBus, ~numEnvironments));
+		sourceEnv = LeakDC.ar(SoundIn.ar(micChan));
 		recPop = BufWr.ar(sourcePop * env, popBuf, phasor, loop:0);
 		recEnv = BufWr.ar(sourceEnv * env, envBuf, phasor, loop:0);
 }).add;
@@ -583,9 +588,9 @@ SynthDef(\rec,
 	var size = buffers.size;
 	var scrambleArray = Array.fill(size, {|i| i}).scramble;
 	scrambleArray.do({|i|
-		// var waitTime = (1.0 / size).rrand(maxWait).pow(2) * numSpeakers;
-		var waitTime = (1.0 / size).rrand(maxWait).pow(2);
-		var pan = 0.0.rrand(1.0 / numSpeakers) + ((1 / numSpeakers) * index);
+		var waitTime = (1.0 / size).rrand(maxWait).pow(2) * numSpeakers.sqrt;
+		// var waitTime = (1.0 / size).rrand(maxWait).pow(2);
+		var pan = ((2.0 / numSpeakers).rand - (1 / numSpeakers)) + ((2.0 / numSpeakers) * index);
 		Synth(\bufPlay, [\buf, buffers[i], \panPos, pan, \slicePoint, slicePoints[i] / s.sampleRate, \specCentAvgBus, ~specCentAvgBus[index][i], \envCentAvgBus, ~envCentAvg[index], \envirSpectralShape, ~envCent[index], \distanceBus, ~distanceBus[index][i], \mixerBus, ~mixerBus, \nyquist, ~nyquist, \volume, ~irVolume[index], \windowSize, 2048, \numChans, numSpeakers], target: ~synthGrp);
 		waitTime.wait;
 	});
@@ -594,8 +599,9 @@ SynthDef(\rec,
 SynthDef(\simpleBufPlay,
 	{|buf, outBus, ampBus, panPos|
 		var play, out, pan;
-		play = PlayBuf.ar(1, buf, doneAction: 2);
+		play = LeakDC.ar(PlayBuf.ar(1, buf, doneAction: 2)).sanitize;
 		play = Compander.ar(play, play, 0.5);
+		play = Limiter.ar(play, 0.9);
 		pan = PanX.ar(~numEnvironments, play, panPos);
 		Out.ar(In.ar(outBus), pan * In.kr(ampBus));
 }).add;
@@ -603,11 +609,12 @@ SynthDef(\simpleBufPlay,
 // Function for crossfading between feedback synths. Crossfade is needed when introducing a new buffer to PartConv.
 ~xFadeFbConvolve = {|buffer, fbSynths, fftSize, pebbleCounter, fadeTime = 2, index, thrBus, numSpeakers|
 	var spectrum, pan;
-	spectrum = ~prepConvolve.(buffer, fftSize);
+	spectrum = ~prepConvolve.(buffer.normalize, fftSize).normalize;
 	s.sync;
 	pan = (1 / (numSpeakers - 1)).clip(0.0, 1.0) * index;
 	fbSynths[pebbleCounter].set(\gate, 0);
+	s.sync;
 	pebbleCounter = (pebbleCounter + 1) % 2;
-	fbSynths[pebbleCounter] = Synth(\feedBack, [\irBuffer, spectrum.normalize, \fftSize, fftSize, \mixerBus, ~mixerBus, \feedbackVol, ~feedbackVol[index], \convolveMix, ~convolveMix[index], \micChan, index, \thresHoldBus, thrBus, \pan, pan], target: ~convolveGrp);
+	fbSynths[pebbleCounter] = Synth(\feedBack, [\irBuffer, spectrum.bufnum, \fftSize, fftSize, \mixerBus, ~mixerBus, \feedbackVol, ~feedbackVol[index], \convolveMix, ~convolveMix[index], \micChan, index, \thresHoldBus, thrBus, \pan, pan], target: ~convolveGrp);
 	pebbleCounter;
 };
