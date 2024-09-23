@@ -4,7 +4,7 @@ s.options.numInputBusChannels_(6);
 s.options.numOutputBusChannels_(40);
 s.options.hardwareBufferSize = 128;
 s.recHeaderFormat = "wav";
-s.options.numBuffers = 4096;
+s.options.numBuffers = 4096 * 2;
 
 s.options.outDevice_(
 	// "MacBook Pro Speakers"
