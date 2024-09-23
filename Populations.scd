@@ -1,5 +1,5 @@
 ~populations = {|popIndex, signals, newGeneration|
-	var newSigs, newBufs, run, featureBuffersGeno, newGen, spectralCentroidGeno, spectralCentroidGenoParents, environment, slicePointArray, spectralCentroidDevPheno, spectralCentroidDevPhenoParents, genCounter, envRecOn, envRecBuf, popOutputRecBuf, age, lifeCycle, adultIndices, adults, seniors, adultFitness, pebble, inSynth, feedbackSynths, convolveSpectrum, initConvolveBuf, ghostsFR, ghostsIR, nextPop, oldestGen;
+	var newSigs, newBufs, run, featureBuffersGeno, newGen, spectralCentroidGeno, spectralCentroidGenoParents, environment, slicePointArray, spectralCentroidDevPheno, spectralCentroidDevPhenoParents, genCounter, envRecOn, envRecBuf, popOutputRecBuf, age, lifeCycle, adultIndices, adults, seniors, adultFitness, pebble, inSynth, feedbackSynths, convolveSpectrum, initConvolveBuf, ghostsFR, ghostsIR, nextPop, oldestGen, convolveBuf;
 
 	feedbackSynths = 2.collect{};
 	adults = [].asList;
@@ -124,7 +124,7 @@
 		s.sync;
 
 		inf.do{
-			var currentGen, parentsGen, children, numAdults, deathCount, modIDs, numNewIndividuals, newTempBuffers;
+			var currentGen, parentsGen, children, numAdults, deathCount, modIDs, numNewIndividuals;
 
 			deathCount = 0;
 			numNewIndividuals = 0;
@@ -191,8 +191,7 @@
 							var nextPopIndex = (popIndex + 1);
 
 							"New Population: %!".format(nextPopIndex).postln;
-							"Ghosts IR: %!".format(ghostsIR).postln;
-							"Ghosts FR: %!".format(ghostsFR).postln;
+
 							~populations.(nextPopIndex, ghostsIR, ghostsFR);
 							~tasks[nextPopIndex].start;
 							nextPop = 1;
@@ -277,9 +276,9 @@
 			numAdults = lifeCycle.indicesOfEqual(1).size;
 
 			if (numAdults >= 4, {
+
 				parents = adultFitness.wChooseNorepeat((numAdults * ~parentFrac).round.asInteger);
-				/*				"Parents: %".format(parents).postln;
-				"Parents size: %".format(parents.size).postln;*/
+
 				couples = parents.tupleRandNoRepRandSize(2, 3, (parents.size * ~parentTuplesFrac).round.asInteger);
 
 				// "Couples: %".format(couples);
@@ -288,21 +287,22 @@
 
 				couples.size.collect{|i|
 
-					if (~xOverProb.coin, {
-						var newPop;
-						if(couples[i].size == 3, {
-							newPop = ~newPop3Parents.(newGen[parentsGen], ~rfftParams[1], couples[i])[0];
-						}, {
-							newPop = ~newPop.(newGen[parentsGen], ~rfftParams[1], couples[i], 0.2)[0]});
+					if ((newGen[parentsGen].size + numNewIndividuals) < (0.8 * ~maxNumIndividuals).asInteger, {
 
-						children.add(newPop);
+						if (~xOverProb.coin, {
+							var newPop;
+							if(couples[i].size == 3, {
+								newPop = ~newPop3Parents.(newGen[parentsGen], ~rfftParams[1], couples[i])[0];
+							}, {
+								newPop = ~newPop.(newGen[parentsGen], ~rfftParams[1], couples[i], 0.2)[0]});
 
-						age.add(0);
-						lifeCycle.add(0);
-						numNewIndividuals = numNewIndividuals + 1;
-					})
+							children.add(newPop);
+							age.add(0);
+							lifeCycle.add(0);
+							numNewIndividuals = numNewIndividuals + 1;
+						})
+					});
 				};
-
 
 				newGen[cycleGenInd] = (newGen[parentsGen] ++ children).asList;
 
@@ -328,17 +328,19 @@
 				};
 			});
 
+			if ( (newGen[parentsGen].size + numNewIndividuals) < (0.8 * ~maxNumIndividuals).asInteger, {
 
-			if (~multiplyOn == true, {
-				if (0.25.coin == true, {
-					var whichIndividuals =  newGen[cycleGenInd].chooseNoRepeat(2);
-					var newMultiply = ~multiplyPolar.(whichIndividuals);
-					s.sync;
-					newGen[cycleGenInd].add(newMultiply);
-					age.add(0);
-					lifeCycle.add(0);
-					numNewIndividuals = numNewIndividuals + 1;
-					// "Multiply".postln;
+				if (~multiplyOn == true, {
+					if (0.25.coin == true, {
+						var whichIndividuals =  newGen[cycleGenInd].chooseNoRepeat(2);
+						var newMultiply = ~multiplyPolar.(whichIndividuals);
+						s.sync;
+						newGen[cycleGenInd].add(newMultiply);
+						age.add(0);
+						lifeCycle.add(0);
+						numNewIndividuals = numNewIndividuals + 1;
+						// "Multiply".postln;
+					});
 				});
 			});
 
@@ -365,8 +367,6 @@
 				});
 			});
 
-			"Envelope".postln;
-
 			if (~spectralEnvelopeOn == true,{
 				newGen[cycleGenInd].do{|item, idx|
 					var polar;
@@ -376,14 +376,17 @@
 				};
 			});
 
-			if (~ancestorReturn == true, {
-				if (genCounter >= ~adultAge, {
-					if (~ancestorReturnProb.coin == true, {
-						"Ancestor returns".postln;
-						newGen[cycleGenInd].add(~parentFreqResp.choose);
-						age.add(5);
-						lifeCycle.add(1);
-						numNewIndividuals = numNewIndividuals + 1;
+			if ( (newGen[parentsGen].size + numNewIndividuals) < (0.8 * ~maxNumIndividuals).asInteger, {
+
+				if (~ancestorReturn == true, {
+					if (genCounter >= ~adultAge, {
+						if (~ancestorReturnProb.coin == true, {
+							"Ancestor returns".postln;
+							newGen[cycleGenInd].add(~parentFreqResp.choose);
+							age.add(5);
+							lifeCycle.add(1);
+							numNewIndividuals = numNewIndividuals + 1;
+						});
 					});
 				});
 			});
@@ -425,28 +428,43 @@
 
 			if (envRecOn.not, {
 				Routine{ 1.do {
+
+					// environment[0].free;
+
+					s.sync;
+
 					envRecOn = true;
 					// "Recording environment on".postln;
 					environment = ~recEnv.(envRecBuf, popOutputRecBuf, ~rfftParams[0], ~rfftParams[2], popIndex);
-					(popOutputRecBuf.numFrames / s.sampleRate).wait;
+					// (popOutputRecBuf.numFrames / s.sampleRate).wait;
 					// "Recording environment off".postln;
-					envRecOn = false;
 
 					if (~envirIrOn, {
-						Routine{ 1.do {
-						if (~roomIrPlaying.not, {
-								var pan;
-							~roomIrPlaying = true;
-								pan = (1 / (~numEnvironments - 1)).clip(0.0, 1.0) * popIndex;
-								"Room IR of population: %".format(popIndex).postln;
-								environment[0].postln;
-						Synth(\simpleBufPlay, [\buf, environment[0], \ampBus, ~envirIrAmpBus[popIndex], \outBus, ~mixerBus, \panPos, pan]);
-								s.sync;
+						if (environment[0].numFrames == ~rfftParams[0], {
+							Routine{ 1.do {
+								if (~roomIrPlaying.not, {
+									var pan;
+									~roomIrPlaying = true;
+									pan = (1 / (~numEnvironments - 1)).clip(0.0, 1.0) * popIndex;
 
-							~roomIrPlaying = false;
+									if (~postInfo[popIndex], {
+										"Room IR of population: %".format(popIndex).postln;
+									});
+
+									Synth(\simpleBufPlay, [\buf, environment[0], \ampBus, ~envirIrAmpBus[popIndex], \outBus, ~mixerBus, \panPos, pan], target: ~convolveGrp);
+									s.sync;
+
+									// 20.wait;
+
+									~roomIrPlaying = false;
+								});
+							}}.play;
+						}, {
+							"Environment IR buffer of population %: wrong number of frames".format(popIndex).postln;
 						});
-						}}.play;
 					});
+
+					envRecOn = false;
 
 				}}.play;
 			});
@@ -475,6 +493,8 @@
 					});
 				});
 
+				s.sync;
+
 				slice.free;
 
 				s.sync;
@@ -487,16 +507,31 @@
 				s.sync;
 			};
 
-			if (1.0.coin, {
-				var conVolveBuf;
-				// "New convolution spectrum".postln;
+			if (genCounter > 5, {
+				if (1.0.coin, {
+					// "New convolution spectrum".postln;
 
-				if (environment[0] != nil, {
-					conVolveBuf = [newBufs[cycleGenInd].choose, environment[0]].choose;
-				}, {
-					conVolveBuf = newBufs[cycleGenInd].choose});
+					/*			if (convolveBuf != nil, {
+					convolveBuf.free;
+					});*/
 
-				pebble = ~xFadeFbConvolve.(conVolveBuf, feedbackSynths, ~convolveFftsize, pebble, 2, popIndex, ~feedbackThreshBus[popIndex], ~numEnvironments);
+
+
+					if (environment[0] != nil, {
+						if (environment[0].numFrames == ~rfftParams[0], {
+							convolveBuf = [newBufs[cycleGenInd].choose, environment[0]].choose;
+						}, {convolveBuf = newBufs[cycleGenInd].choose});
+					}, {
+						convolveBuf = newBufs[cycleGenInd].choose});
+
+					s.sync;
+
+					"Change feedback pop %".format(popIndex).postln;
+					convolveBuf.postln;
+
+					pebble = ~xFadeFbConvolve.(convolveBuf, feedbackSynths, ~convolveFftsize, pebble, 2, popIndex, ~feedbackThreshBus[popIndex], ~numEnvironments);
+				});
+
 			});
 
 			s.sync;
@@ -504,6 +539,10 @@
 			// "Play new buffers".postln;
 
 			~playBufs.(popIndex, newBufs[cycleGenInd], slicePointArray, ~bufPlayMaxWaitTime, ~numEnvironments);
+
+			s.sync;
+
+			"Get busses for generation %".format(popIndex).postln;
 
 			newBufs[cycleGenInd].size.do({|i|
 				if(i < spectralCentroidDevPheno.size, {
