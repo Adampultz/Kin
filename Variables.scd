@@ -39,14 +39,14 @@
 
 ~newGenPopSize = 15;
 
-~deathProb = 0.3;
+~deathProb = 0.5;
 
 ~ancestralMemory = 4; // How many generations (as audio buffers) are stored
 ~sigBufRedundancy = 4; // For storing and freeing ir buffers
 ~genCounter = 0;
 ~numPop = 4;
 ~cycleGenInd = 0;
-~convolveFftsize = 4096;
+~convolveFftsize = 2048;
 
 ~toBlackhole = 16;
 
@@ -59,6 +59,8 @@
 ~bufPlayMaxWaitTime = 1.5;
 
 ~numEnvironments = 4;
+
+~maxNumIndividuals = 100;
 
 ~envirIrOn = true;
 
